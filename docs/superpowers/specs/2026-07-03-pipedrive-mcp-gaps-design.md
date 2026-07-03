@@ -19,8 +19,8 @@ All follow the repo's three-part pattern: params struct with `jsonschema` tags �
 
 | Tool | Endpoint | Gate |
 |---|---|---|
-| `pipedrive.deals.archive` | `POST /api/v2/deals/{id}/archive` | write |
-| `pipedrive.deals.unarchive` | `POST /api/v2/deals/{id}/unarchive` | write |
+| `pipedrive.deals.archive` | v2 `PATCH /deals/{id}` body `{"is_archived": true}` | write |
+| `pipedrive.deals.unarchive` | v2 `PATCH /deals/{id}` body `{"is_archived": false}` | write |
 | `pipedrive.deal_fields.add_option` | v1 `GET /dealFields/{id}` then `PUT /dealFields/{id}` | write |
 | `pipedrive.filters.create` | v1 `POST /filters` | write |
 | `pipedrive.filters.update` | v1 `PUT /filters/{id}` | write |
@@ -32,7 +32,7 @@ All follow the repo's three-part pattern: params struct with `jsonschema` tags �
 ### Changed tools (5)
 
 1. **`deals.update`** — new `label_ids` param (`*[]int64`; pointer distinguishes "clear all labels" (`[]`) from "not provided" (nil)).
-2. **`deals.list`** — new params: `is_archived` (`*bool`), `sort_by` (`id | add_time | update_time`), `sort_direction` (`asc | desc`). With `sort_by=add_time` a caller can scan by creation date and stop paging at the cutoff — this is the TODO's accepted alternative to native `add_time` range params, which v2 `GET /deals` does not offer.
+2. **`deals.list`** — new params: `is_archived` (`*bool`; when `true` the handler targets `GET /deals/archived`, which per the OpenAPI spec takes the identical param set — plain `GET /deals` only ever returns non-archived deals and has no `is_archived` query param), `sort_by` (`id | add_time | update_time`), `sort_direction` (`asc | desc`). With `sort_by=add_time` a caller can scan by creation date and stop paging at the cutoff — this is the TODO's accepted alternative to native `add_time` range params, which v2 `GET /deals` does not offer.
 3. **`deals.get` / `deals.list`** — normalized deal objects surface `label_ids` and `is_archived`.
 4. **`context.get`** — fifth parallel metadata fetch: v1 `GET /activityTypes` → `activity_types` key (cached with `TTLs.Metadata`, same per-key error isolation as the other four). Fixes the `activities.create` blind `email`→`task` fallback: the skill can validate the type key upfront. `activities.create`'s tool description gains a note to check `context.get` for valid `type` keys.
 5. **Delete gating message** — `guardDelete` denial message states that BOTH `PIPEDRIVE_ALLOW_WRITE=true` and `PIPEDRIVE_ALLOW_DELETE=true` are required; README's gating section spells it out.
@@ -44,8 +44,9 @@ Registry: 59 → 68 tools. README catalog, tool-count references, and `docs/role
 ### Deal archive / unarchive
 
 - Params: `{id int64}` (required).
+- Implemented as v2 `PATCH /deals/{id}` with body `{"is_archived": true}` (archive) / `{"is_archived": false}` (unarchive) — the OpenAPI spec has no dedicated archive endpoints; `archive_time` is set automatically by Pipedrive when omitted.
 - On success return `internal.Wrap({"deal": normalized}, nil)` from the response body; invalidate via the existing `invalidateDealsCache(client, id)`.
-- Tool annotations: `WithIdempotentHintAnnotation(true)` (archiving an archived deal is a no-op/4xx passed through as soft error).
+- Tool annotations: `WithIdempotentHintAnnotation(true)` (archiving an archived deal is a no-op).
 
 ### `deal_fields.add_option`
 
@@ -56,8 +57,8 @@ Registry: 59 → 68 tools. README catalog, tool-count references, and `docs/role
 
 ### `filters.create` / `filters.update`
 
-- Create params: `{name string, type string (deals|leads|persons|org|products|activities), conditions object}`.
-- Update params: `{id int64, name?, conditions?}`.
+- Create params: `{name string, type string (deals|leads|org|people|products|activity|projects — the v1 enum), conditions object}`; all three required.
+- Update params: `{id int64, conditions object (required — the v1 PUT requires it), name?}`. `type` cannot be changed via PUT (not in `updateFilterRequest`).
 - `conditions` is passed through as raw JSON to the API. The tool description links to Pipedrive's filter-conditions format (two-level glue tree: `{"glue":"and","conditions":[{"glue":"or","conditions":[...]}, ...]}`) and gives one worked example using a custom-field key from `context.get`. No client-side validation beyond "is a JSON object" — Pipedrive's 400 body is surfaced via the existing `wrapAPIError` path so the LLM sees what was wrong.
 - Invalidate v1 `/filters` cache on both.
 - This is the designed answer to both "no server-side custom-field filtering" and "deals.search is term-based only": create a saved filter once, then `deals.list?filter_id=X` is true server-side filtering.
@@ -72,19 +73,18 @@ Registry: 59 → 68 tools. README catalog, tool-count references, and `docs/role
 ### Webhooks
 
 - `webhooks.list`: no params beyond `cache_mode`; cached with `TTLs.Metadata`.
-- `webhooks.create` params: `{subscription_url (required), event_action (create|change|delete|*), event_object (deal|activity|person|organization|note|lead|product|*), user_id?, http_auth_user?, http_auth_password?, version? ("1.0"|"2.0", default "2.0")}`. Auth password masked in the echoed result via `internal.MaskSensitive`.
+- `webhooks.create` params: `{name (required, ≤255 chars), subscription_url (required), event_action (required: create|change|delete|*), event_object (required: activity|deal|lead|note|organization|person|pipeline|product|stage|user|*), user_id?, http_auth_user?, http_auth_password?, version? ("1.0"|"2.0", default "2.0")}`. Auth password masked in the echoed result via `internal.MaskSensitive` (its `password` substring rule already covers `http_auth_password`).
 - `webhooks.delete` params: `{id int64}`; delete-gated.
 - Create/delete invalidate the `/webhooks` cache.
 
 ### Mail direction (`deals.mail.list`)
 
-- Investigation task: check `pipedrive/normalize_mail.go` for what party/direction data the normalizer keeps.
-- Pipedrive mail messages expose `from`/`to`/`cc` party arrays and a `mail_thread` `first_message_direction`-style hint; the normalized message will carry an explicit `direction` field derived from party data when the API provides it (values: `incoming | outgoing | unknown`), plus the from/to parties, so reply detection stops depending on string-matching the lead's address.
-- If the raw API turns out to already provide a reliable direction flag, we surface it verbatim instead of deriving.
+- Verified against the v1 OpenAPI spec: mail objects have **no** literal `direction` field. Message objects carry `sent_flag` (0/1, "whether the mail thread message is sent"), `draft` / `draft_flag`, and `from`/`to`/`cc`/`bcc` party arrays.
+- `NormalizedMailMessage` gains a `direction` field derived at the normalizer: `draft_flag != 0 → "draft"`, else `sent_flag != 0 → "outgoing"`, else `"incoming"`. The existing from/to parties stay, so reply detection uses `direction == "incoming"` instead of string-matching the lead's address.
 
-### API-fact verification (before implementation)
+### API-fact verification (done 2026-07-03, against the official OpenAPI specs)
 
-During planning, verify against the Pipedrive API reference (docs pages, not memory): v2 archive endpoints' response shape, `is_archived` query param on v2 `GET /deals`, `label_ids` accepted by v2 `PATCH /deals/{id}`, v2 `GET /deals` `sort_by` allowed values, v1 `PUT /dealFields/{id}` options semantics, webhooks v2 `version` field. Any mismatch updates this spec before code is written.
+Verified and corrected in this spec: no dedicated archive endpoints (use `PATCH /deals/{id}` `is_archived`); archived deals listed via `GET /deals/archived` (no `is_archived` query param on `GET /deals`); no `add_time` range params in v2 (sort-by-`add_time` confirmed: `sort_by` enum `id|update_time|add_time`, `sort_direction` `asc|desc`); `label_ids` (int array) confirmed on `PATCH /deals/{id}` and on the v2 Deal schema along with `is_archived`; v1 `PUT /dealFields/{id}` takes `{name?, options?, add_visible_flag?}` where `options` is a full-array replace (existing items must carry `id`, new items `{label}` only) and applies to `field_type` `enum`/`set`; `GET /activityTypes` confirmed (`id`, `name`, `key_string`, `icon_key`, `active_flag`); webhook POST requires `name` + `subscription_url` + `event_action` + `event_object`; filter `type` enum includes `projects` and PUT cannot change it.
 
 ## Section 3 — Testing, docs, delivery
 
