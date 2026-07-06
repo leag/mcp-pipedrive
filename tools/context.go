@@ -17,8 +17,8 @@ type ContextGetParams struct {
 	CacheMode string `json:"cache_mode,omitempty" jsonschema:"description=Cache mode: default|bypass|refresh|only"`
 }
 
-// contextGet returns users + pipelines + stages + deal-fields metadata in one
-// call. All four sub-calls share the metadata TTL.
+// contextGet returns users + pipelines + stages + deal-fields + activity-types metadata in one
+// call. All five sub-calls share the metadata TTL.
 func contextGet(ctx context.Context, args ContextGetParams) (any, error) {
 	if disabled, err := ensureToolAllowed(ctx, "pipedrive.context.get", guardRead); err != nil {
 		return nil, err
@@ -51,6 +51,7 @@ func contextGet(ctx context.Context, args ContextGetParams) (any, error) {
 		{pipedrive.V2, "/pipelines", nil, "pipelines"},
 		{pipedrive.V2, "/stages", nil, "stages"},
 		{pipedrive.V1, "/dealFields", nil, "deal_fields"},
+		{pipedrive.V1, "/activityTypes", nil, "activity_types"},
 	}
 
 	out := make([]result, len(calls))
@@ -96,7 +97,7 @@ func extractDataField(payload any) any {
 
 var ContextGet = mcppipedrive.MustTool(
 	"pipedrive.context.get",
-	"Fetch users, pipelines, stages and deal-field metadata in one cached call. Useful to prime an LLM before deal operations.",
+	"Fetch users, pipelines, stages, deal-field and activity-type metadata in one cached call. Useful to prime an LLM before deal operations.",
 	contextGet,
 	mcp.WithTitleAnnotation("Get Pipedrive context"),
 	mcp.WithIdempotentHintAnnotation(true),

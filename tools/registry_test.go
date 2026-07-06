@@ -67,6 +67,7 @@ func TestRegistry_DefaultRegistersEverythingExceptDestructiveAdmin(t *testing.T)
 		"pipedrive.deals.unarchive",
 		"pipedrive.persons.search",
 		"pipedrive.filters.list",
+		"pipedrive.deal_fields.add_option",
 		"pipedrive.cache.stats",
 	} {
 		if !contains(names, must) {

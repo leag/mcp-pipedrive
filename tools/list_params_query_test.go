@@ -63,6 +63,17 @@ func newWriteTestCtx(t *testing.T) (context.Context, *captureTransport) {
 	return ctx, transport
 }
 
+// clientFromTestCtx returns the *pipedrive.Client installed by newTestCtx so
+// tests can adjust its transport.
+func clientFromTestCtx(t *testing.T, ctx context.Context) *pipedrive.Client {
+	t.Helper()
+	client := pipedrive.ClientFromContext(ctx)
+	if client == nil {
+		t.Fatal("no client in test context")
+	}
+	return client
+}
+
 // mustBody unmarshals the JSON body of the last captured request.
 func mustBody(t *testing.T, transport *captureTransport) map[string]any {
 	t.Helper()

@@ -303,7 +303,7 @@ var ActivitiesGet = mcppipedrive.MustTool("pipedrive.activities.get",
 	mcp.WithTitleAnnotation("Get activity"), mcp.WithIdempotentHintAnnotation(true), mcp.WithReadOnlyHintAnnotation(true))
 
 var ActivitiesCreate = mcppipedrive.MustTool("pipedrive.activities.create",
-	"Create a new activity (write). Requires PIPEDRIVE_ALLOW_WRITE=true.",
+	"Create a new activity (write). Requires PIPEDRIVE_ALLOW_WRITE=true. Validate the type key against pipedrive.context.get activity_types[].key_string first — unknown types are rejected by Pipedrive.",
 	activitiesCreate,
 	mcp.WithTitleAnnotation("Create activity"))
 

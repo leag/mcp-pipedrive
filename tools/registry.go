@@ -57,6 +57,8 @@ func allTools() []mcppipedrive.Tool {
 		LeadsList, LeadsGet, LeadsSearch, LeadsCreate, LeadsUpdate, LeadsDelete,
 		// activities
 		ActivitiesList, ActivitiesGet, ActivitiesCreate, ActivitiesUpdate, ActivitiesDelete,
+		// deal fields (option management)
+		DealFieldsAddOption,
 		// notes
 		NotesList, NotesCreate,
 		// filters (saved-filter discovery)
