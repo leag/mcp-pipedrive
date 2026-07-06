@@ -19,7 +19,7 @@ import (
 const batchCreateMax = 100
 
 type ActivitiesBatchCreateParams struct {
-	Activities  []ActivitiesCreateParams `json:"activities" jsonschema:"description=Activities to create, in order (1-100 items; same fields as pipedrive.activities.create)"`
+	Activities  []ActivitiesCreateParams `json:"activities" jsonschema:"description=Activities to create in order (1-100 items; same fields as pipedrive.activities.create)"`
 	StopOnError bool                     `json:"stop_on_error,omitempty" jsonschema:"description=Abort at the first failed item (default false: continue and report per-item errors)"`
 }
 

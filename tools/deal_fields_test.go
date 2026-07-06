@@ -117,6 +117,16 @@ func TestDealFieldsAddOption_RejectsNonEnumField(t *testing.T) {
 	}
 }
 
+func TestDealFieldsAddOption_RejectsEmptyLabel(t *testing.T) {
+	ctx, transport := newScriptedCtx(t, nil)
+	if _, err := dealFieldsAddOption(ctx, DealFieldsAddOptionParams{FieldID: 55, Options: []string{"Valid", "  "}}); err == nil {
+		t.Fatal("expected error for whitespace-only label")
+	}
+	if len(transport.requests) != 0 {
+		t.Fatalf("must not make any request when a label is empty; requests = %d", len(transport.requests))
+	}
+}
+
 func TestDealFieldsAddOption_AllDuplicatesSkipsPut(t *testing.T) {
 	ctx, transport := newScriptedCtx(t, []string{
 		`{"success":true,"data":{"id":55,"field_type":"set","options":[{"id":1,"label":"A"}]}}`,

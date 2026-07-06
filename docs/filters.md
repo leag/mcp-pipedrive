@@ -102,7 +102,7 @@ Or force-refresh on a single call:
 
 There is no `pipedrive.filters.{get,delete}`. Filter deletion stays in the Pipedrive UI. `pipedrive.filters.create` and `pipedrive.filters.update` exist but are write-gated (require `PIPEDRIVE_ALLOW_WRITE=true`). For filter discovery and inspection, call `pipedrive.filters.list` with `include_raw: true` to read raw conditions.
 
-There is also no native label / custom-field filter on the list tools themselves. Both of those are exactly what saved filters are for — build the view once in the UI, then call by `filter_id`.
+There is also no native label / custom-field filter on the list tools themselves. Both of those are exactly what saved filters are for — build the filter in the UI, or create one via `pipedrive.filters.create` (see below), then call by `filter_id`.
 
 ## Creating and updating filters
 

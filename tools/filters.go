@@ -19,7 +19,7 @@ import (
 )
 
 type FiltersListParams struct {
-	Type       string `json:"type,omitempty" jsonschema:"description=Filter type: deals|people|org|product|activity|lead (omit for all)"`
+	Type       string `json:"type,omitempty" jsonschema:"description=Filter type: deals|leads|org|people|products|activity|projects (omit for all)"`
 	IncludeRaw bool   `json:"include_raw,omitempty" jsonschema:"description=If true also include raw v1 payload (with conditions tree)"`
 	CacheMode  string `json:"cache_mode,omitempty" jsonschema:"description=Cache mode: default|bypass|refresh|only"`
 }
@@ -62,7 +62,7 @@ func filtersList(ctx context.Context, args FiltersListParams) (any, error) {
 type FiltersCreateParams struct {
 	Name       string         `json:"name" jsonschema:"description=Filter name"`
 	Type       string         `json:"type" jsonschema:"description=Filter type: deals|leads|org|people|products|activity|projects"`
-	Conditions map[string]any `json:"conditions" jsonschema:"description=Pipedrive conditions tree (two-level glue structure with max 16 leaf conditions): {\"glue\":\"and\",\"conditions\":[{\"glue\":\"and\",\"conditions\":[{\"object\":\"deal\",\"field_id\":\"12345\",\"operator\":\"=\",\"value\":\"open\"}]},{\"glue\":\"or\",\"conditions\":[]}]}. Resolve field_id values from pipedrive.context.get deal_fields"`
+	Conditions map[string]any `json:"conditions" jsonschema:"description=Pipedrive two-level glue conditions tree (max 16 leaf conditions). See the pipedrive.filters.create tool description for a worked example and docs/filters.md for details"`
 }
 
 type FiltersUpdateParams struct {
@@ -154,7 +154,11 @@ var FiltersList = mcppipedrive.MustTool("pipedrive.filters.list",
 	mcp.WithReadOnlyHintAnnotation(true))
 
 var FiltersCreate = mcppipedrive.MustTool("pipedrive.filters.create",
-	"Create a saved filter (write; v1). Combine with filter_id on list tools for server-side filtering, including custom-field conditions. Requires PIPEDRIVE_ALLOW_WRITE=true. See docs/filters.md.",
+	`Create a saved filter (write; v1). Combine with filter_id on list tools for server-side filtering, including custom-field conditions. Requires PIPEDRIVE_ALLOW_WRITE=true. See docs/filters.md.
+
+conditions is a two-level glue tree (max 16 leaf conditions). Example — deals where custom field 12345 equals "open":
+{"glue":"and","conditions":[{"glue":"and","conditions":[{"object":"deal","field_id":"12345","operator":"=","value":"open"}]},{"glue":"or","conditions":[]}]}
+Resolve field_id values (numeric field IDs, not hash keys) from pipedrive.context.get -> deal_fields.`,
 	filtersCreate,
 	mcp.WithTitleAnnotation("Create saved filter"))
 

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -34,6 +35,11 @@ func dealFieldsAddOption(ctx context.Context, args DealFieldsAddOptionParams) (a
 	}
 	if len(args.Options) == 0 {
 		return nil, fmt.Errorf("options must contain at least one label")
+	}
+	for _, label := range args.Options {
+		if strings.TrimSpace(label) == "" {
+			return nil, fmt.Errorf("options must not contain empty or whitespace-only labels")
+		}
 	}
 	client, err := clientOrError(ctx)
 	if err != nil {

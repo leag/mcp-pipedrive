@@ -3,7 +3,7 @@
 **Full access.** Equivalent to Pipedrive's built-in admin user type — unrestricted `deals:full` + `contacts:full` + `products:full` + `activities:full` + `leads:full` + `mail:full` + the destructive cache admin tools.
 
 - **Tools exposed:** 68 (every tool the MCP ships)
-- **Tokens (tools/list):** 8,952
+- **Tokens (tools/list):** 8,952 (measured against the pre-68-tool catalog; treat as a lower bound until re-measured)
 - **Savings vs baseline:** 0 (this is the baseline)
 
 ## Who should use it
