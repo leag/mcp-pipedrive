@@ -31,6 +31,8 @@ type DealsListParams struct {
 	IsArchived   *bool  `json:"is_archived,omitempty" jsonschema:"description=true → list archived deals (targets GET /deals/archived); false or omitted → non-archived deals"`
 	UpdatedSince string `json:"updated_since,omitempty" jsonschema:"description=RFC3339 lower bound on update_time (e.g. 2026-05-01T00:00:00Z)"`
 	UpdatedUntil string `json:"updated_until,omitempty" jsonschema:"description=RFC3339 upper bound on update_time"`
+	SortBy        string `json:"sort_by,omitempty" jsonschema:"description=Sort field: id|update_time|add_time (default id). Use add_time+desc to scan by creation date"`
+	SortDirection string `json:"sort_direction,omitempty" jsonschema:"description=Sort direction: asc|desc (default asc)"`
 	IncludeRaw   bool   `json:"include_raw,omitempty" jsonschema:"description=If true also include raw v2 payload"`
 	CacheMode    string `json:"cache_mode,omitempty" jsonschema:"description=Cache mode: default|bypass|refresh|only"`
 }
@@ -133,6 +135,18 @@ func dealsList(ctx context.Context, args DealsListParams) (any, error) {
 	}
 	if args.UpdatedUntil != "" {
 		q.Set("updated_until", args.UpdatedUntil)
+	}
+	if args.SortBy != "" {
+		if err := internal.RequireOneOf(args.SortBy, "sort_by", "id", "update_time", "add_time"); err != nil {
+			return nil, err
+		}
+		q.Set("sort_by", args.SortBy)
+	}
+	if args.SortDirection != "" {
+		if err := internal.RequireOneOf(args.SortDirection, "sort_direction", "asc", "desc"); err != nil {
+			return nil, err
+		}
+		q.Set("sort_direction", args.SortDirection)
 	}
 
 	path := "/deals"

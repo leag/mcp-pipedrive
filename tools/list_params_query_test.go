@@ -401,3 +401,87 @@ func TestDealsUpdate_LabelIDsPropagation(t *testing.T) {
 		t.Errorf("label_ids should be absent when not provided, body: %v", body)
 	}
 }
+
+func TestDealsList_SortPropagation(t *testing.T) {
+	ctx, transport := newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{SortBy: "add_time", SortDirection: "desc"}); err != nil {
+		t.Fatalf("dealsList: %v", err)
+	}
+	q := mustQuery(t, transport)
+	assertHas(t, q, "sort_by", "add_time")
+	assertHas(t, q, "sort_direction", "desc")
+
+	ctx, transport = newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{}); err != nil {
+		t.Fatalf("dealsList zero: %v", err)
+	}
+	q = mustQuery(t, transport)
+	assertAbsent(t, q, "sort_by")
+	assertAbsent(t, q, "sort_direction")
+
+	ctx, _ = newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{SortBy: "stage_id"}); err == nil {
+		t.Fatal("expected error for invalid sort_by")
+	}
+	ctx, _ = newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{SortDirection: "down"}); err == nil {
+		t.Fatal("expected error for invalid sort_direction")
+	}
+}
+
+func TestFiltersCreate_BodyPropagation(t *testing.T) {
+	conditions := map[string]any{
+		"glue": "and",
+		"conditions": []any{
+			map[string]any{"glue": "and", "conditions": []any{}},
+			map[string]any{"glue": "or", "conditions": []any{}},
+		},
+	}
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := filtersCreate(ctx, FiltersCreateParams{
+		Name: "mary sweep", Type: "deals", Conditions: conditions,
+	}); err != nil {
+		t.Fatalf("filtersCreate: %v", err)
+	}
+	assertRequest(t, transport, "POST", "/api/v1/filters")
+	body := mustBody(t, transport)
+	if body["name"] != "mary sweep" || body["type"] != "deals" {
+		t.Errorf("body = %v", body)
+	}
+	if _, ok := body["conditions"].(map[string]any); !ok {
+		t.Errorf("conditions not passed through: %v", body["conditions"])
+	}
+
+	ctx, _ = newWriteTestCtx(t)
+	if _, err := filtersCreate(ctx, FiltersCreateParams{Name: "x", Type: "bogus", Conditions: conditions}); err == nil {
+		t.Fatal("expected error for invalid type")
+	}
+	ctx, _ = newWriteTestCtx(t)
+	if _, err := filtersCreate(ctx, FiltersCreateParams{Name: "x", Type: "deals"}); err == nil {
+		t.Fatal("expected error for missing conditions")
+	}
+}
+
+func TestFiltersUpdate_BodyPropagation(t *testing.T) {
+	conditions := map[string]any{"glue": "and", "conditions": []any{}}
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := filtersUpdate(ctx, FiltersUpdateParams{ID: 12, Name: "renamed", Conditions: conditions}); err != nil {
+		t.Fatalf("filtersUpdate: %v", err)
+	}
+	assertRequest(t, transport, "PUT", "/api/v1/filters/12")
+	body := mustBody(t, transport)
+	if body["name"] != "renamed" {
+		t.Errorf("name = %v", body["name"])
+	}
+	if _, ok := body["conditions"].(map[string]any); !ok {
+		t.Errorf("conditions not passed through: %v", body["conditions"])
+	}
+	if _, present := body["type"]; present {
+		t.Errorf("type must never be sent on update: %v", body)
+	}
+
+	ctx, _ = newWriteTestCtx(t)
+	if _, err := filtersUpdate(ctx, FiltersUpdateParams{ID: 12}); err == nil {
+		t.Fatal("expected error for missing conditions (required by v1 PUT)")
+	}
+}

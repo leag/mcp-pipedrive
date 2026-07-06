@@ -61,8 +61,8 @@ func allTools() []mcppipedrive.Tool {
 		DealFieldsAddOption,
 		// notes
 		NotesList, NotesCreate,
-		// filters (saved-filter discovery)
-		FiltersList,
+		// filters (saved-filter discovery + management)
+		FiltersList, FiltersCreate, FiltersUpdate,
 		// mailbox
 		MailThreadsList, MailThreadsGet, MailMessagesGet, DealsMailList,
 		// cache (stats is always on; clear/invalidate behind AdminToolsEnabled)
