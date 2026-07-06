@@ -91,7 +91,8 @@ Set `PIPEDRIVE_DOMAIN` to your Pipedrive subdomain, e.g. `mycompany.pipedrive.co
 
 ### Write (gated by `PIPEDRIVE_ALLOW_WRITE=true`)
 
-- `pipedrive.deals.{create,update,archive,unarchive}`
+- `pipedrive.deals.{create,update}`
+- `pipedrive.deals.{archive,unarchive}` — sets `is_archived` via PATCH
 - `pipedrive.deal_fields.add_option` — append options to enum/set deal fields
 - `pipedrive.deals.products.{attach,update,detach}`
 - `pipedrive.persons.{create,update}`
@@ -101,6 +102,7 @@ Set `PIPEDRIVE_DOMAIN` to your Pipedrive subdomain, e.g. `mycompany.pipedrive.co
 - `pipedrive.leads.{create,update}`
 - `pipedrive.activities.{create,update,batch_create}` — batch_create supports up to 100 activities per call
 - `pipedrive.notes.create`
+- `pipedrive.webhooks.create` — Pipedrive POSTs matching events to `subscription_url`
 - `pipedrive.deals.followers.{add,remove}`
 - `pipedrive.persons.followers.{add,remove}`
 - `pipedrive.organizations.followers.{add,remove}`
@@ -130,7 +132,7 @@ Every `tools/list` call ships the full schema of every registered tool into the 
 
 | Role | Tools | Tokens | Saved | Recipe |
 |---|---:|---:|---:|---|
-| admin | 63 | 8,952 | — | [docs/roles/admin.md](docs/roles/admin.md) |
+| admin | 68 | 8,952 | — | [docs/roles/admin.md](docs/roles/admin.md) |
 | sales-manager | 47 | 7,987 | 10.8 % | [docs/roles/sales-manager.md](docs/roles/sales-manager.md) |
 | sales-rep | 33 | 6,049 | 32.4 % | [docs/roles/sales-rep.md](docs/roles/sales-rep.md) |
 | sdr | 24 | 4,498 | 49.8 % | [docs/roles/sdr.md](docs/roles/sdr.md) |

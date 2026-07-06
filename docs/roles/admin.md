@@ -2,7 +2,7 @@
 
 **Full access.** Equivalent to Pipedrive's built-in admin user type — unrestricted `deals:full` + `contacts:full` + `products:full` + `activities:full` + `leads:full` + `mail:full` + the destructive cache admin tools.
 
-- **Tools exposed:** 63 (every tool the MCP ships)
+- **Tools exposed:** 68 (every tool the MCP ships)
 - **Tokens (tools/list):** 8,952
 - **Savings vs baseline:** 0 (this is the baseline)
 
@@ -33,10 +33,13 @@ No allowlist is the point: admin needs everything. Setting `PIPEDRIVE_ALLOWED_TO
 - `pipedrive.organizations.{list,get,search,create,update,delete}`
 - `pipedrive.organizations.followers.{list,add,remove}`
 - `pipedrive.products.{list,get,search,create,update,delete}`
-- `pipedrive.filters.{create,update}`
+- `pipedrive.filters.{list,create,update}`
 - `pipedrive.leads.{list,get,search,create,update,delete}`
 - `pipedrive.activities.{list,get,create,update,delete,batch_create}`
 - `pipedrive.notes.{list,create}`
+- `pipedrive.mail.threads.{list,get}`
+- `pipedrive.mail.messages.get`
+- `pipedrive.deals.mail.list`
 - `pipedrive.webhooks.{list,create,delete}`
 - `pipedrive.cache.{stats,clear,invalidate}`
 

@@ -110,18 +110,20 @@ There is also no native label / custom-field filter on the list tools themselves
 
 Conditions are Pipedrive's two-level glue tree (max 16 leaf conditions). Example — deals where the custom field `mary_processed_at` is set AND `mary_archived_at` is empty:
 
+```json
+{
+  "glue": "and",
+  "conditions": [
     {
       "glue": "and",
       "conditions": [
-        {
-          "glue": "and",
-          "conditions": [
-            {"object": "deal", "field_id": "<id of mary_processed_at>", "operator": "IS NOT NULL", "value": null},
-            {"object": "deal", "field_id": "<id of mary_archived_at>", "operator": "IS NULL", "value": null}
-          ]
-        },
-        {"glue": "or", "conditions": []}
+        {"object": "deal", "field_id": "<id of mary_processed_at>", "operator": "IS NOT NULL", "value": null},
+        {"object": "deal", "field_id": "<id of mary_archived_at>", "operator": "IS NULL", "value": null}
       ]
-    }
+    },
+    {"glue": "or", "conditions": []}
+  ]
+}
+```
 
 Resolve `field_id` values (numeric field IDs, not hash keys) from `pipedrive.context.get` → `deal_fields`. Then pass the returned filter `id` as `filter_id` to `pipedrive.deals.list` for true server-side filtering.
