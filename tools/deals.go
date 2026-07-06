@@ -28,6 +28,7 @@ type DealsListParams struct {
 	PipelineID   int64  `json:"pipeline_id,omitempty" jsonschema:"description=Filter by pipeline ID"`
 	StageID      int64  `json:"stage_id,omitempty" jsonschema:"description=Filter by stage ID"`
 	FilterID     int64  `json:"filter_id,omitempty" jsonschema:"description=Apply a saved Pipedrive filter (discover via pipedrive.filters.list)"`
+	IsArchived   *bool  `json:"is_archived,omitempty" jsonschema:"description=true → list archived deals (targets GET /deals/archived); false or omitted → non-archived deals"`
 	UpdatedSince string `json:"updated_since,omitempty" jsonschema:"description=RFC3339 lower bound on update_time (e.g. 2026-05-01T00:00:00Z)"`
 	UpdatedUntil string `json:"updated_until,omitempty" jsonschema:"description=RFC3339 upper bound on update_time"`
 	IncludeRaw   bool   `json:"include_raw,omitempty" jsonschema:"description=If true also include raw v2 payload"`
@@ -80,6 +81,14 @@ type DealsDeleteParams struct {
 	ID int64 `json:"id" jsonschema:"description=Deal ID to delete"`
 }
 
+type DealsArchiveParams struct {
+	ID int64 `json:"id" jsonschema:"description=Deal ID to archive"`
+}
+
+type DealsUnarchiveParams struct {
+	ID int64 `json:"id" jsonschema:"description=Deal ID to unarchive"`
+}
+
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
@@ -125,11 +134,15 @@ func dealsList(ctx context.Context, args DealsListParams) (any, error) {
 		q.Set("updated_until", args.UpdatedUntil)
 	}
 
-	req, err := client.NewRequest(pipedrive.V2, http.MethodGet, "/deals", q, nil)
+	path := "/deals"
+	if args.IsArchived != nil && *args.IsArchived {
+		path = "/deals/archived"
+	}
+	req, err := client.NewRequest(pipedrive.V2, http.MethodGet, path, q, nil)
 	if err != nil {
 		return nil, err
 	}
-	key := pipedrive.Key(client, pipedrive.V2, http.MethodGet, "/deals", q, nil)
+	key := pipedrive.Key(client, pipedrive.V2, http.MethodGet, path, q, nil)
 	payload, cacheMeta, err := client.CachedGet(req.WithContext(ctx), key, client.TTLs.List, mode)
 	if err != nil {
 		return nil, wrapAPIError(err)
@@ -359,6 +372,42 @@ func dealsDelete(ctx context.Context, args DealsDeleteParams) (any, error) {
 	}, nil), nil
 }
 
+func dealsSetArchived(ctx context.Context, toolName string, id int64, archived bool) (any, error) {
+	if disabled, err := ensureToolAllowed(ctx, toolName, guardWrite); err != nil {
+		return nil, err
+	} else if disabled != nil {
+		return disabled, nil
+	}
+	if id <= 0 {
+		return nil, fmt.Errorf("id is required and must be > 0")
+	}
+	client, err := clientOrError(ctx)
+	if err != nil {
+		return nil, err
+	}
+	path := "/deals/" + strconv.FormatInt(id, 10)
+	req, err := client.NewRequest(pipedrive.V2, http.MethodPatch, path, nil, map[string]any{"is_archived": archived})
+	if err != nil {
+		return nil, err
+	}
+	var payload any
+	if err := client.DoJSON(req.WithContext(ctx), &payload); err != nil {
+		return nil, wrapAPIError(err)
+	}
+	invalidateDealsCache(client, id)
+	raw, dealRaw := extractItemData(payload)
+	deal := pipedrive.NormalizeDeal(dealRaw)
+	return internal.Wrap(map[string]any{"deal": deal, "raw": internal.MaskSensitive(raw)}, nil), nil
+}
+
+func dealsArchive(ctx context.Context, args DealsArchiveParams) (any, error) {
+	return dealsSetArchived(ctx, "pipedrive.deals.archive", args.ID, true)
+}
+
+func dealsUnarchive(ctx context.Context, args DealsUnarchiveParams) (any, error) {
+	return dealsSetArchived(ctx, "pipedrive.deals.unarchive", args.ID, false)
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -457,7 +506,7 @@ func wrapAPIError(err error) error {
 
 var DealsList = mcppipedrive.MustTool(
 	"pipedrive.deals.list",
-	"List deals (Pipedrive API v2) with optional filter_id, status, owner/pipeline/stage, updated_since/updated_until, and cursor pagination. When paginating a filtered call, re-pass filter_id with every cursor.",
+	"List deals (Pipedrive API v2) with optional filter_id, status, owner/pipeline/stage, updated_since/updated_until, sort_by/sort_direction, is_archived, and cursor pagination. When paginating a filtered call, re-pass filter_id with every cursor.",
 	dealsList,
 	mcp.WithTitleAnnotation("List deals"),
 	mcp.WithIdempotentHintAnnotation(true),
@@ -502,5 +551,21 @@ var DealsDelete = mcppipedrive.MustTool(
 	dealsDelete,
 	mcp.WithTitleAnnotation("Delete deal"),
 	mcp.WithDestructiveHintAnnotation(true),
+)
+
+var DealsArchive = mcppipedrive.MustTool(
+	"pipedrive.deals.archive",
+	"Archive a deal (write; sets is_archived=true via PATCH). Requires PIPEDRIVE_ALLOW_WRITE=true.",
+	dealsArchive,
+	mcp.WithTitleAnnotation("Archive deal"),
+	mcp.WithIdempotentHintAnnotation(true),
+)
+
+var DealsUnarchive = mcppipedrive.MustTool(
+	"pipedrive.deals.unarchive",
+	"Unarchive a deal (write; sets is_archived=false via PATCH). Requires PIPEDRIVE_ALLOW_WRITE=true.",
+	dealsUnarchive,
+	mcp.WithTitleAnnotation("Unarchive deal"),
+	mcp.WithIdempotentHintAnnotation(true),
 )
 

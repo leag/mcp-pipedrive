@@ -3,6 +3,7 @@ package tools
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -11,15 +12,23 @@ import (
 	"mcp-pipedrive/pipedrive"
 )
 
-// captureTransport records the most recent outgoing request and returns a
-// canned empty-list response. Lets us assert which query parameters a list
-// handler actually sends upstream without hitting Pipedrive.
+// captureTransport records the most recent outgoing request (and its body)
+// and returns a canned empty-list response. Lets us assert which query
+// parameters and body fields a handler actually sends upstream without
+// hitting Pipedrive.
 type captureTransport struct {
-	last *http.Request
+	last     *http.Request
+	lastBody []byte
 }
 
 func (c *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.last = req
+	c.lastBody = nil
+	if req.Body != nil {
+		b, _ := io.ReadAll(req.Body)
+		c.lastBody = b
+		req.Body = io.NopCloser(bytes.NewReader(b))
+	}
 	body := bytes.NewBufferString(`{"success":true,"data":[]}`)
 	return &http.Response{
 		StatusCode: 200,
@@ -43,6 +52,28 @@ func newTestCtx(t *testing.T) (context.Context, *captureTransport) {
 	ctx := pipedrive.WithConfig(context.Background(), pipedrive.Config{})
 	ctx = pipedrive.WithClient(ctx, client)
 	return ctx, transport
+}
+
+// newWriteTestCtx is newTestCtx with write+delete flags enabled, for
+// exercising gated handlers end-to-end.
+func newWriteTestCtx(t *testing.T) (context.Context, *captureTransport) {
+	t.Helper()
+	ctx, transport := newTestCtx(t)
+	ctx = pipedrive.WithConfig(ctx, pipedrive.Config{AllowWrite: true, AllowDelete: true})
+	return ctx, transport
+}
+
+// mustBody unmarshals the JSON body of the last captured request.
+func mustBody(t *testing.T, transport *captureTransport) map[string]any {
+	t.Helper()
+	if transport.lastBody == nil {
+		t.Fatal("handler did not send a request body")
+	}
+	var body map[string]any
+	if err := json.Unmarshal(transport.lastBody, &body); err != nil {
+		t.Fatalf("unmarshal body: %v (raw: %s)", err, transport.lastBody)
+	}
+	return body
 }
 
 func mustQuery(t *testing.T, transport *captureTransport) url.Values {
@@ -265,4 +296,62 @@ func TestFiltersList_TypePassthrough(t *testing.T) {
 		t.Fatalf("filtersList zero: %v", err)
 	}
 	assertAbsent(t, mustQuery(t, transport), "type")
+}
+
+func TestDealsArchive_PatchesIsArchivedTrue(t *testing.T) {
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := dealsArchive(ctx, DealsArchiveParams{ID: 7}); err != nil {
+		t.Fatalf("dealsArchive: %v", err)
+	}
+	assertRequest(t, transport, "PATCH", "/api/v2/deals/7")
+	body := mustBody(t, transport)
+	if v, ok := body["is_archived"].(bool); !ok || !v {
+		t.Errorf("is_archived = %v, want true", body["is_archived"])
+	}
+}
+
+func TestDealsUnarchive_PatchesIsArchivedFalse(t *testing.T) {
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := dealsUnarchive(ctx, DealsUnarchiveParams{ID: 7}); err != nil {
+		t.Fatalf("dealsUnarchive: %v", err)
+	}
+	assertRequest(t, transport, "PATCH", "/api/v2/deals/7")
+	body := mustBody(t, transport)
+	if v, ok := body["is_archived"].(bool); !ok || v {
+		t.Errorf("is_archived = %v, want false", body["is_archived"])
+	}
+}
+
+func TestDealsArchive_WriteGate(t *testing.T) {
+	ctx, _ := newTestCtx(t) // Config{} → write disabled
+	res, err := dealsArchive(ctx, DealsArchiveParams{ID: 7})
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	d, ok := res.(disabledResult)
+	if !ok || d.Error != "write_disabled" {
+		t.Fatalf("expected write_disabled payload, got %+v", res)
+	}
+}
+
+func TestDealsList_ArchivedRouting(t *testing.T) {
+	yes := true
+	ctx, transport := newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{IsArchived: &yes}); err != nil {
+		t.Fatalf("dealsList archived: %v", err)
+	}
+	assertRequest(t, transport, "GET", "/api/v2/deals/archived")
+
+	no := false
+	ctx, transport = newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{IsArchived: &no}); err != nil {
+		t.Fatalf("dealsList non-archived: %v", err)
+	}
+	assertRequest(t, transport, "GET", "/api/v2/deals")
+
+	ctx, transport = newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{}); err != nil {
+		t.Fatalf("dealsList default: %v", err)
+	}
+	assertRequest(t, transport, "GET", "/api/v2/deals")
 }

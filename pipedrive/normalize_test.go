@@ -151,3 +151,27 @@ func TestNormalizeNote(t *testing.T) {
 		t.Fatalf("note mismatch: %+v", n)
 	}
 }
+
+func TestNormalizeDeal_LabelIDsAndIsArchived(t *testing.T) {
+	d := NormalizeDeal(map[string]any{
+		"id":          float64(1),
+		"title":       "x",
+		"status":      "open",
+		"label_ids":   []any{float64(3), float64(9)},
+		"is_archived": true,
+	})
+	if len(d.LabelIDs) != 2 || d.LabelIDs[0] != 3 || d.LabelIDs[1] != 9 {
+		t.Errorf("LabelIDs = %v, want [3 9]", d.LabelIDs)
+	}
+	if !d.IsArchived {
+		t.Error("IsArchived = false, want true")
+	}
+
+	empty := NormalizeDeal(map[string]any{"id": float64(2), "title": "y", "status": "open"})
+	if empty.LabelIDs != nil {
+		t.Errorf("LabelIDs = %v, want nil when absent", empty.LabelIDs)
+	}
+	if empty.IsArchived {
+		t.Error("IsArchived = true, want false when absent")
+	}
+}

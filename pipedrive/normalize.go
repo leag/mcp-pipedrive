@@ -13,6 +13,8 @@ type NormalizedDeal struct {
 	OrganizationID int64          `json:"organization_id,omitempty"`
 	PipelineID     int64          `json:"pipeline_id,omitempty"`
 	StageID        int64          `json:"stage_id,omitempty"`
+	LabelIDs       []int64        `json:"label_ids,omitempty"`
+	IsArchived     bool           `json:"is_archived,omitempty"`
 	AddTime        string         `json:"add_time,omitempty"`
 	UpdateTime     string         `json:"update_time,omitempty"`
 	CustomFields   map[string]any `json:"custom_fields,omitempty"`
@@ -43,6 +45,15 @@ func NormalizeDeal(raw map[string]any) NormalizedDeal {
 	if cf, ok := raw["custom_fields"].(map[string]any); ok {
 		d.CustomFields = cf
 	}
+
+	if arr, ok := raw["label_ids"].([]any); ok {
+		for _, v := range arr {
+			if id := toInt64(v); id != 0 {
+				d.LabelIDs = append(d.LabelIDs, id)
+			}
+		}
+	}
+	d.IsArchived = toBool(raw["is_archived"])
 
 	return d
 }

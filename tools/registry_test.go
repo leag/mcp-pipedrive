@@ -63,6 +63,8 @@ func TestRegistry_DefaultRegistersEverythingExceptDestructiveAdmin(t *testing.T)
 		"pipedrive.context.get",
 		"pipedrive.deals.list",
 		"pipedrive.deals.create",
+		"pipedrive.deals.archive",
+		"pipedrive.deals.unarchive",
 		"pipedrive.persons.search",
 		"pipedrive.filters.list",
 		"pipedrive.cache.stats",

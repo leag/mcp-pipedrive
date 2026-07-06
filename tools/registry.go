@@ -38,7 +38,7 @@ func allTools() []mcppipedrive.Tool {
 		// context
 		ContextGet,
 		// deals core
-		DealsList, DealsGet, DealsSearch, DealsCreate, DealsUpdate, DealsDelete,
+		DealsList, DealsGet, DealsSearch, DealsCreate, DealsUpdate, DealsDelete, DealsArchive, DealsUnarchive,
 		// deals.products
 		DealProductsList, DealProductsAttach, DealProductsUpdate, DealProductsDetach,
 		// deals.followers
