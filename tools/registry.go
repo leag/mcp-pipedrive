@@ -56,7 +56,7 @@ func allTools() []mcppipedrive.Tool {
 		// leads
 		LeadsList, LeadsGet, LeadsSearch, LeadsCreate, LeadsUpdate, LeadsDelete,
 		// activities
-		ActivitiesList, ActivitiesGet, ActivitiesCreate, ActivitiesUpdate, ActivitiesDelete,
+		ActivitiesList, ActivitiesGet, ActivitiesCreate, ActivitiesUpdate, ActivitiesDelete, ActivitiesBatchCreate,
 		// deal fields (option management)
 		DealFieldsAddOption,
 		// notes
@@ -65,6 +65,8 @@ func allTools() []mcppipedrive.Tool {
 		FiltersList, FiltersCreate, FiltersUpdate,
 		// mailbox
 		MailThreadsList, MailThreadsGet, MailMessagesGet, DealsMailList,
+		// webhooks
+		WebhooksList, WebhooksCreate, WebhooksDelete,
 		// cache (stats is always on; clear/invalidate behind AdminToolsEnabled)
 		CacheStats, CacheClear, CacheInvalidate,
 	}

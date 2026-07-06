@@ -485,3 +485,55 @@ func TestFiltersUpdate_BodyPropagation(t *testing.T) {
 		t.Fatal("expected error for missing conditions (required by v1 PUT)")
 	}
 }
+
+func TestWebhooksCreate_BodyPropagation(t *testing.T) {
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := webhooksCreate(ctx, WebhooksCreateParams{
+		Name:            "n8n new deal",
+		SubscriptionURL: "https://n8n.example.com/webhook/abc",
+		EventAction:     "create",
+		EventObject:     "deal",
+	}); err != nil {
+		t.Fatalf("webhooksCreate: %v", err)
+	}
+	assertRequest(t, transport, "POST", "/api/v1/webhooks")
+	body := mustBody(t, transport)
+	if body["name"] != "n8n new deal" || body["subscription_url"] != "https://n8n.example.com/webhook/abc" {
+		t.Errorf("body = %v", body)
+	}
+	if body["event_action"] != "create" || body["event_object"] != "deal" {
+		t.Errorf("event fields = %v / %v", body["event_action"], body["event_object"])
+	}
+
+	ctx, _ = newWriteTestCtx(t)
+	if _, err := webhooksCreate(ctx, WebhooksCreateParams{
+		Name: "x", SubscriptionURL: "https://x", EventAction: "created", EventObject: "deal",
+	}); err == nil {
+		t.Fatal("expected error for invalid event_action (v1 uses create|change|delete|*)")
+	}
+}
+
+func TestWebhooksList_And_Delete(t *testing.T) {
+	ctx, transport := newTestCtx(t)
+	if _, err := webhooksList(ctx, WebhooksListParams{}); err != nil {
+		t.Fatalf("webhooksList: %v", err)
+	}
+	assertRequest(t, transport, "GET", "/api/v1/webhooks")
+
+	ctx, transport = newWriteTestCtx(t)
+	if _, err := webhooksDelete(ctx, WebhooksDeleteParams{ID: 4}); err != nil {
+		t.Fatalf("webhooksDelete: %v", err)
+	}
+	assertRequest(t, transport, "DELETE", "/api/v1/webhooks/4")
+
+	// Delete is gated on BOTH flags — write-only must refuse.
+	ctx, _ = newTestCtx(t)
+	ctx = pipedrive.WithConfig(ctx, pipedrive.Config{AllowWrite: true})
+	res, err := webhooksDelete(ctx, WebhooksDeleteParams{ID: 4})
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	if d, ok := res.(disabledResult); !ok || d.Error != "delete_disabled" {
+		t.Fatalf("expected delete_disabled, got %+v", res)
+	}
+}

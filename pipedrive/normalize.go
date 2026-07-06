@@ -369,6 +369,44 @@ func NormalizeFilterList(raw []any) []NormalizedFilter {
 	return out
 }
 
+// NormalizedWebhook is the stable shape for a Pipedrive webhook subscription.
+// HTTP auth credentials are intentionally omitted.
+type NormalizedWebhook struct {
+	ID              int64  `json:"id"`
+	Name            string `json:"name,omitempty"`
+	SubscriptionURL string `json:"subscription_url"`
+	EventAction     string `json:"event_action"`
+	EventObject     string `json:"event_object"`
+	UserID          int64  `json:"user_id,omitempty"`
+	IsActive        bool   `json:"is_active"`
+	Version         string `json:"version,omitempty"`
+	AddTime         string `json:"add_time,omitempty"`
+}
+
+func NormalizeWebhook(raw map[string]any) NormalizedWebhook {
+	return NormalizedWebhook{
+		ID:              toInt64(raw["id"]),
+		Name:            toString(raw["name"]),
+		SubscriptionURL: toString(raw["subscription_url"]),
+		EventAction:     toString(raw["event_action"]),
+		EventObject:     toString(raw["event_object"]),
+		UserID:          relatedID(raw, "user_id"),
+		IsActive:        toBool(firstNonNil(raw, "is_active", "active_flag")),
+		Version:         toString(raw["version"]),
+		AddTime:         toString(raw["add_time"]),
+	}
+}
+
+func NormalizeWebhookList(raw []any) []NormalizedWebhook {
+	out := make([]NormalizedWebhook, 0, len(raw))
+	for _, v := range raw {
+		if m, ok := v.(map[string]any); ok {
+			out = append(out, NormalizeWebhook(m))
+		}
+	}
+	return out
+}
+
 // ProductPrice is Pipedrive's per-currency price block.
 type ProductPrice struct {
 	Currency     string  `json:"currency"`
