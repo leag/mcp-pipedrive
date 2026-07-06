@@ -74,6 +74,7 @@ type DealsUpdateParams struct {
 	PipelineID     int64          `json:"pipeline_id,omitempty" jsonschema:"description=New pipeline ID"`
 	StageID        int64          `json:"stage_id,omitempty" jsonschema:"description=New stage ID"`
 	Status         string         `json:"status,omitempty" jsonschema:"description=New status: open|won|lost"`
+	LabelIDs       *[]int64       `json:"label_ids,omitempty" jsonschema:"description=Replace the deal's labels with these label option IDs (empty array clears all labels). Resolve option IDs from the deal label field options in pipedrive.context.get deal_fields"`
 	CustomFields   map[string]any `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs to merge"`
 }
 
@@ -322,6 +323,9 @@ func dealsUpdate(ctx context.Context, args DealsUpdateParams) (any, error) {
 	if len(args.CustomFields) > 0 {
 		body["custom_fields"] = args.CustomFields
 	}
+	if args.LabelIDs != nil {
+		body["label_ids"] = *args.LabelIDs
+	}
 	if len(body) == 0 {
 		return nil, fmt.Errorf("no fields to update")
 	}
@@ -540,7 +544,7 @@ var DealsCreate = mcppipedrive.MustTool(
 
 var DealsUpdate = mcppipedrive.MustTool(
 	"pipedrive.deals.update",
-	"Update an existing deal (write). Requires PIPEDRIVE_ALLOW_WRITE=true.",
+	"Update an existing deal (write), including label_ids for deal labels. Requires PIPEDRIVE_ALLOW_WRITE=true.",
 	dealsUpdate,
 	mcp.WithTitleAnnotation("Update deal"),
 )

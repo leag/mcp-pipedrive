@@ -355,3 +355,38 @@ func TestDealsList_ArchivedRouting(t *testing.T) {
 	}
 	assertRequest(t, transport, "GET", "/api/v2/deals")
 }
+
+func TestDealsUpdate_LabelIDsPropagation(t *testing.T) {
+	labels := []int64{3, 9}
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := dealsUpdate(ctx, DealsUpdateParams{ID: 5, LabelIDs: &labels}); err != nil {
+		t.Fatalf("dealsUpdate: %v", err)
+	}
+	assertRequest(t, transport, "PATCH", "/api/v2/deals/5")
+	body := mustBody(t, transport)
+	got, ok := body["label_ids"].([]any)
+	if !ok || len(got) != 2 || got[0].(float64) != 3 || got[1].(float64) != 9 {
+		t.Errorf("label_ids = %v, want [3 9]", body["label_ids"])
+	}
+
+	// Empty (non-nil) slice must be sent — it clears all labels.
+	empty := []int64{}
+	ctx, transport = newWriteTestCtx(t)
+	if _, err := dealsUpdate(ctx, DealsUpdateParams{ID: 5, LabelIDs: &empty}); err != nil {
+		t.Fatalf("dealsUpdate clear: %v", err)
+	}
+	body = mustBody(t, transport)
+	if got, ok := body["label_ids"].([]any); !ok || len(got) != 0 {
+		t.Errorf("label_ids = %v, want []", body["label_ids"])
+	}
+
+	// Nil pointer must be absent.
+	ctx, transport = newWriteTestCtx(t)
+	if _, err := dealsUpdate(ctx, DealsUpdateParams{ID: 5, Title: "t"}); err != nil {
+		t.Fatalf("dealsUpdate nil: %v", err)
+	}
+	body = mustBody(t, transport)
+	if _, present := body["label_ids"]; present {
+		t.Errorf("label_ids should be absent when not provided, body: %v", body)
+	}
+}
