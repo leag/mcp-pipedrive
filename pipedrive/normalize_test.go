@@ -4,18 +4,18 @@ import "testing"
 
 func TestNormalizeDealV2Shape(t *testing.T) {
 	raw := map[string]any{
-		"id":       float64(42),
-		"title":    "Big deal",
-		"status":   "open",
-		"value":    float64(1000),
-		"currency": "EUR",
-		"owner_id": float64(7),
-		"person_id": float64(11),
-		"org_id":    float64(13),
-		"pipeline_id": float64(1),
-		"stage_id":    float64(2),
+		"id":            float64(42),
+		"title":         "Big deal",
+		"status":        "open",
+		"value":         float64(1000),
+		"currency":      "EUR",
+		"owner_id":      float64(7),
+		"person_id":     float64(11),
+		"org_id":        float64(13),
+		"pipeline_id":   float64(1),
+		"stage_id":      float64(2),
 		"custom_fields": map[string]any{"color": "blue"},
-		"add_time":    "2026-01-01T10:00:00Z",
+		"add_time":      "2026-01-01T10:00:00Z",
 	}
 	d := NormalizeDeal(raw)
 	if d.ID != 42 || d.Title != "Big deal" || d.Status != "open" {
@@ -39,9 +39,9 @@ func TestNormalizeDealV1Shape(t *testing.T) {
 	// v1 returns some related objects as {value: id, name: "..."}; make sure
 	// the normalizer can peel those.
 	raw := map[string]any{
-		"id":    float64(99),
-		"title": "Legacy",
-		"status": "won",
+		"id":      float64(99),
+		"title":   "Legacy",
+		"status":  "won",
 		"user_id": map[string]any{"value": float64(5), "name": "owner"},
 		"org_id":  map[string]any{"value": float64(17)},
 	}

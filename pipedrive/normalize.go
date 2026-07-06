@@ -472,18 +472,18 @@ func NormalizeFollowerList(raw []any) []NormalizedFollower {
 
 // NormalizedDealProduct represents a product attached to a deal.
 type NormalizedDealProduct struct {
-	ID          int64   `json:"id"`
-	DealID      int64   `json:"deal_id"`
-	ProductID   int64   `json:"product_id"`
-	Name        string  `json:"name,omitempty"`
-	Quantity    float64 `json:"quantity"`
-	ItemPrice   float64 `json:"item_price,omitempty"`
-	Discount    float64 `json:"discount,omitempty"`
-	DiscountType string `json:"discount_type,omitempty"`
-	Tax         float64 `json:"tax,omitempty"`
-	Currency    string  `json:"currency,omitempty"`
-	Comments    string  `json:"comments,omitempty"`
-	AddTime     string  `json:"add_time,omitempty"`
+	ID           int64   `json:"id"`
+	DealID       int64   `json:"deal_id"`
+	ProductID    int64   `json:"product_id"`
+	Name         string  `json:"name,omitempty"`
+	Quantity     float64 `json:"quantity"`
+	ItemPrice    float64 `json:"item_price,omitempty"`
+	Discount     float64 `json:"discount,omitempty"`
+	DiscountType string  `json:"discount_type,omitempty"`
+	Tax          float64 `json:"tax,omitempty"`
+	Currency     string  `json:"currency,omitempty"`
+	Comments     string  `json:"comments,omitempty"`
+	AddTime      string  `json:"add_time,omitempty"`
 }
 
 func NormalizeDealProduct(raw map[string]any) NormalizedDealProduct {
@@ -515,18 +515,18 @@ func NormalizeDealProductList(raw []any) []NormalizedDealProduct {
 
 // NormalizedLead is the stable shape for a Pipedrive lead (v1 only).
 type NormalizedLead struct {
-	ID             string         `json:"id"`
-	Title          string         `json:"title"`
-	OwnerID        int64          `json:"owner_id,omitempty"`
-	PersonID       int64          `json:"person_id,omitempty"`
-	OrganizationID int64          `json:"organization_id,omitempty"`
-	Value          float64        `json:"value,omitempty"`
-	Currency       string         `json:"currency,omitempty"`
-	ExpectedCloseDate string      `json:"expected_close_date,omitempty"`
-	LabelIDs       []string       `json:"label_ids,omitempty"`
-	AddTime        string         `json:"add_time,omitempty"`
-	UpdateTime     string         `json:"update_time,omitempty"`
-	CustomFields   map[string]any `json:"custom_fields,omitempty"`
+	ID                string         `json:"id"`
+	Title             string         `json:"title"`
+	OwnerID           int64          `json:"owner_id,omitempty"`
+	PersonID          int64          `json:"person_id,omitempty"`
+	OrganizationID    int64          `json:"organization_id,omitempty"`
+	Value             float64        `json:"value,omitempty"`
+	Currency          string         `json:"currency,omitempty"`
+	ExpectedCloseDate string         `json:"expected_close_date,omitempty"`
+	LabelIDs          []string       `json:"label_ids,omitempty"`
+	AddTime           string         `json:"add_time,omitempty"`
+	UpdateTime        string         `json:"update_time,omitempty"`
+	CustomFields      map[string]any `json:"custom_fields,omitempty"`
 }
 
 func NormalizeLead(raw map[string]any) NormalizedLead {

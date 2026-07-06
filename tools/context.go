@@ -103,4 +103,3 @@ var ContextGet = mcppipedrive.MustTool(
 	mcp.WithIdempotentHintAnnotation(true),
 	mcp.WithReadOnlyHintAnnotation(true),
 )
-

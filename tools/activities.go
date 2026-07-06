@@ -316,4 +316,3 @@ var ActivitiesDelete = mcppipedrive.MustTool("pipedrive.activities.delete",
 	"Delete an activity (write+delete). Requires PIPEDRIVE_ALLOW_WRITE=true AND PIPEDRIVE_ALLOW_DELETE=true.",
 	activitiesDelete,
 	mcp.WithTitleAnnotation("Delete activity"), mcp.WithDestructiveHintAnnotation(true))
-

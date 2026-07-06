@@ -100,6 +100,6 @@ Or force-refresh on a single call:
 
 ## What is *not* exposed
 
-There is no `pipedrive.filters.{get,create,update,delete}`. Filter authoring stays in the Pipedrive UI — the MCP only **discovers** and **applies** existing filters. If you need detailed filter conditions for inspection, call `pipedrive.filters.list` with `include_raw: true` and read `data.raw`.
+There is no `pipedrive.filters.{get,delete}`. Filter deletion stays in the Pipedrive UI. `pipedrive.filters.create` and `pipedrive.filters.update` exist but are write-gated (require `PIPEDRIVE_ALLOW_WRITE=true`). See docs/filters.md for details. For filter discovery and inspection, call `pipedrive.filters.list` with `include_raw: true` to read raw conditions.
 
 There is also no native label / custom-field filter on the list tools themselves. Both of those are exactly what saved filters are for — build the view once in the UI, then call by `filter_id`.
