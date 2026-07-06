@@ -55,6 +55,7 @@ type NormalizedMailMessage struct {
 	Cc             []NormalizedMailParticipant `json:"cc,omitempty"`
 	Bcc            []NormalizedMailParticipant `json:"bcc,omitempty"`
 	MessageTime    string                      `json:"message_time,omitempty"`
+	Direction      string                      `json:"direction,omitempty"`
 	ReadFlag       int                         `json:"read_flag"`
 	DraftFlag      int                         `json:"draft_flag,omitempty"`
 	SentFlag       int                         `json:"sent_flag,omitempty"`
@@ -127,6 +128,17 @@ func NormalizeMailMessage(raw map[string]any, bodyFormat string) NormalizedMailM
 		SentFlag:       int(toInt64(raw["sent_flag"])),
 		DeletedFlag:    int(toInt64(raw["deleted_flag"])),
 		HasAttachments: toInt64(raw["has_attachments_flag"]) != 0,
+	}
+	// Direction is derived: draft_flag → "draft"; sent_flag → "outgoing"
+	// (sent by a workspace user); otherwise "incoming". The raw API has no
+	// direction field.
+	switch {
+	case toInt64(raw["draft_flag"]) != 0:
+		m.Direction = "draft"
+	case toInt64(raw["sent_flag"]) != 0:
+		m.Direction = "outgoing"
+	default:
+		m.Direction = "incoming"
 	}
 	if bodyFormat == BodyFormatNone {
 		return m

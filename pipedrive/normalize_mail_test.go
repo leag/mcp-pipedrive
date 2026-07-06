@@ -148,3 +148,21 @@ func TestHTMLToTextStripsMarkupAndPreservesLinks(t *testing.T) {
 		t.Fatalf("expected link URL preserved, got %q", out)
 	}
 }
+
+func TestNormalizeMailMessage_Direction(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  map[string]any
+		want string
+	}{
+		{"sent → outgoing", map[string]any{"id": float64(1), "sent_flag": float64(1)}, "outgoing"},
+		{"unsent → incoming", map[string]any{"id": float64(2), "sent_flag": float64(0)}, "incoming"},
+		{"no flags → incoming", map[string]any{"id": float64(3)}, "incoming"},
+		{"draft wins", map[string]any{"id": float64(4), "draft_flag": float64(1), "sent_flag": float64(1)}, "draft"},
+	}
+	for _, tc := range cases {
+		if got := NormalizeMailMessage(tc.raw, BodyFormatNone).Direction; got != tc.want {
+			t.Errorf("%s: Direction = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
