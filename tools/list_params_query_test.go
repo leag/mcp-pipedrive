@@ -3,6 +3,7 @@ package tools
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -11,15 +12,23 @@ import (
 	"mcp-pipedrive/pipedrive"
 )
 
-// captureTransport records the most recent outgoing request and returns a
-// canned empty-list response. Lets us assert which query parameters a list
-// handler actually sends upstream without hitting Pipedrive.
+// captureTransport records the most recent outgoing request (and its body)
+// and returns a canned empty-list response. Lets us assert which query
+// parameters and body fields a handler actually sends upstream without
+// hitting Pipedrive.
 type captureTransport struct {
-	last *http.Request
+	last     *http.Request
+	lastBody []byte
 }
 
 func (c *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.last = req
+	c.lastBody = nil
+	if req.Body != nil {
+		b, _ := io.ReadAll(req.Body)
+		c.lastBody = b
+		req.Body = io.NopCloser(bytes.NewReader(b))
+	}
 	body := bytes.NewBufferString(`{"success":true,"data":[]}`)
 	return &http.Response{
 		StatusCode: 200,
@@ -43,6 +52,39 @@ func newTestCtx(t *testing.T) (context.Context, *captureTransport) {
 	ctx := pipedrive.WithConfig(context.Background(), pipedrive.Config{})
 	ctx = pipedrive.WithClient(ctx, client)
 	return ctx, transport
+}
+
+// newWriteTestCtx is newTestCtx with write+delete flags enabled, for
+// exercising gated handlers end-to-end.
+func newWriteTestCtx(t *testing.T) (context.Context, *captureTransport) {
+	t.Helper()
+	ctx, transport := newTestCtx(t)
+	ctx = pipedrive.WithConfig(ctx, pipedrive.Config{AllowWrite: true, AllowDelete: true})
+	return ctx, transport
+}
+
+// clientFromTestCtx returns the *pipedrive.Client installed by newTestCtx so
+// tests can adjust its transport.
+func clientFromTestCtx(t *testing.T, ctx context.Context) *pipedrive.Client {
+	t.Helper()
+	client := pipedrive.ClientFromContext(ctx)
+	if client == nil {
+		t.Fatal("no client in test context")
+	}
+	return client
+}
+
+// mustBody unmarshals the JSON body of the last captured request.
+func mustBody(t *testing.T, transport *captureTransport) map[string]any {
+	t.Helper()
+	if transport.lastBody == nil {
+		t.Fatal("handler did not send a request body")
+	}
+	var body map[string]any
+	if err := json.Unmarshal(transport.lastBody, &body); err != nil {
+		t.Fatalf("unmarshal body: %v (raw: %s)", err, transport.lastBody)
+	}
+	return body
 }
 
 func mustQuery(t *testing.T, transport *captureTransport) url.Values {
@@ -265,4 +307,233 @@ func TestFiltersList_TypePassthrough(t *testing.T) {
 		t.Fatalf("filtersList zero: %v", err)
 	}
 	assertAbsent(t, mustQuery(t, transport), "type")
+}
+
+func TestDealsArchive_PatchesIsArchivedTrue(t *testing.T) {
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := dealsArchive(ctx, DealsArchiveParams{ID: 7}); err != nil {
+		t.Fatalf("dealsArchive: %v", err)
+	}
+	assertRequest(t, transport, "PATCH", "/api/v2/deals/7")
+	body := mustBody(t, transport)
+	if v, ok := body["is_archived"].(bool); !ok || !v {
+		t.Errorf("is_archived = %v, want true", body["is_archived"])
+	}
+}
+
+func TestDealsUnarchive_PatchesIsArchivedFalse(t *testing.T) {
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := dealsUnarchive(ctx, DealsUnarchiveParams{ID: 7}); err != nil {
+		t.Fatalf("dealsUnarchive: %v", err)
+	}
+	assertRequest(t, transport, "PATCH", "/api/v2/deals/7")
+	body := mustBody(t, transport)
+	if v, ok := body["is_archived"].(bool); !ok || v {
+		t.Errorf("is_archived = %v, want false", body["is_archived"])
+	}
+}
+
+func TestDealsArchive_WriteGate(t *testing.T) {
+	ctx, _ := newTestCtx(t) // Config{} → write disabled
+	res, err := dealsArchive(ctx, DealsArchiveParams{ID: 7})
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	d, ok := res.(disabledResult)
+	if !ok || d.Error != "write_disabled" {
+		t.Fatalf("expected write_disabled payload, got %+v", res)
+	}
+}
+
+func TestDealsList_ArchivedRouting(t *testing.T) {
+	yes := true
+	ctx, transport := newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{IsArchived: &yes}); err != nil {
+		t.Fatalf("dealsList archived: %v", err)
+	}
+	assertRequest(t, transport, "GET", "/api/v2/deals/archived")
+
+	no := false
+	ctx, transport = newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{IsArchived: &no}); err != nil {
+		t.Fatalf("dealsList non-archived: %v", err)
+	}
+	assertRequest(t, transport, "GET", "/api/v2/deals")
+
+	ctx, transport = newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{}); err != nil {
+		t.Fatalf("dealsList default: %v", err)
+	}
+	assertRequest(t, transport, "GET", "/api/v2/deals")
+}
+
+func TestDealsUpdate_LabelIDsPropagation(t *testing.T) {
+	labels := []int64{3, 9}
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := dealsUpdate(ctx, DealsUpdateParams{ID: 5, LabelIDs: &labels}); err != nil {
+		t.Fatalf("dealsUpdate: %v", err)
+	}
+	assertRequest(t, transport, "PATCH", "/api/v2/deals/5")
+	body := mustBody(t, transport)
+	got, ok := body["label_ids"].([]any)
+	if !ok || len(got) != 2 || got[0].(float64) != 3 || got[1].(float64) != 9 {
+		t.Errorf("label_ids = %v, want [3 9]", body["label_ids"])
+	}
+
+	// Empty (non-nil) slice must be sent — it clears all labels.
+	empty := []int64{}
+	ctx, transport = newWriteTestCtx(t)
+	if _, err := dealsUpdate(ctx, DealsUpdateParams{ID: 5, LabelIDs: &empty}); err != nil {
+		t.Fatalf("dealsUpdate clear: %v", err)
+	}
+	body = mustBody(t, transport)
+	if got, ok := body["label_ids"].([]any); !ok || len(got) != 0 {
+		t.Errorf("label_ids = %v, want []", body["label_ids"])
+	}
+
+	// Nil pointer must be absent.
+	ctx, transport = newWriteTestCtx(t)
+	if _, err := dealsUpdate(ctx, DealsUpdateParams{ID: 5, Title: "t"}); err != nil {
+		t.Fatalf("dealsUpdate nil: %v", err)
+	}
+	body = mustBody(t, transport)
+	if _, present := body["label_ids"]; present {
+		t.Errorf("label_ids should be absent when not provided, body: %v", body)
+	}
+}
+
+func TestDealsList_SortPropagation(t *testing.T) {
+	ctx, transport := newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{SortBy: "add_time", SortDirection: "desc"}); err != nil {
+		t.Fatalf("dealsList: %v", err)
+	}
+	q := mustQuery(t, transport)
+	assertHas(t, q, "sort_by", "add_time")
+	assertHas(t, q, "sort_direction", "desc")
+
+	ctx, transport = newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{}); err != nil {
+		t.Fatalf("dealsList zero: %v", err)
+	}
+	q = mustQuery(t, transport)
+	assertAbsent(t, q, "sort_by")
+	assertAbsent(t, q, "sort_direction")
+
+	ctx, _ = newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{SortBy: "stage_id"}); err == nil {
+		t.Fatal("expected error for invalid sort_by")
+	}
+	ctx, _ = newTestCtx(t)
+	if _, err := dealsList(ctx, DealsListParams{SortDirection: "down"}); err == nil {
+		t.Fatal("expected error for invalid sort_direction")
+	}
+}
+
+func TestFiltersCreate_BodyPropagation(t *testing.T) {
+	conditions := map[string]any{
+		"glue": "and",
+		"conditions": []any{
+			map[string]any{"glue": "and", "conditions": []any{}},
+			map[string]any{"glue": "or", "conditions": []any{}},
+		},
+	}
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := filtersCreate(ctx, FiltersCreateParams{
+		Name: "mary sweep", Type: "deals", Conditions: conditions,
+	}); err != nil {
+		t.Fatalf("filtersCreate: %v", err)
+	}
+	assertRequest(t, transport, "POST", "/api/v1/filters")
+	body := mustBody(t, transport)
+	if body["name"] != "mary sweep" || body["type"] != "deals" {
+		t.Errorf("body = %v", body)
+	}
+	if _, ok := body["conditions"].(map[string]any); !ok {
+		t.Errorf("conditions not passed through: %v", body["conditions"])
+	}
+
+	ctx, _ = newWriteTestCtx(t)
+	if _, err := filtersCreate(ctx, FiltersCreateParams{Name: "x", Type: "bogus", Conditions: conditions}); err == nil {
+		t.Fatal("expected error for invalid type")
+	}
+	ctx, _ = newWriteTestCtx(t)
+	if _, err := filtersCreate(ctx, FiltersCreateParams{Name: "x", Type: "deals"}); err == nil {
+		t.Fatal("expected error for missing conditions")
+	}
+}
+
+func TestFiltersUpdate_BodyPropagation(t *testing.T) {
+	conditions := map[string]any{"glue": "and", "conditions": []any{}}
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := filtersUpdate(ctx, FiltersUpdateParams{ID: 12, Name: "renamed", Conditions: conditions}); err != nil {
+		t.Fatalf("filtersUpdate: %v", err)
+	}
+	assertRequest(t, transport, "PUT", "/api/v1/filters/12")
+	body := mustBody(t, transport)
+	if body["name"] != "renamed" {
+		t.Errorf("name = %v", body["name"])
+	}
+	if _, ok := body["conditions"].(map[string]any); !ok {
+		t.Errorf("conditions not passed through: %v", body["conditions"])
+	}
+	if _, present := body["type"]; present {
+		t.Errorf("type must never be sent on update: %v", body)
+	}
+
+	ctx, _ = newWriteTestCtx(t)
+	if _, err := filtersUpdate(ctx, FiltersUpdateParams{ID: 12}); err == nil {
+		t.Fatal("expected error for missing conditions (required by v1 PUT)")
+	}
+}
+
+func TestWebhooksCreate_BodyPropagation(t *testing.T) {
+	ctx, transport := newWriteTestCtx(t)
+	if _, err := webhooksCreate(ctx, WebhooksCreateParams{
+		Name:            "n8n new deal",
+		SubscriptionURL: "https://n8n.example.com/webhook/abc",
+		EventAction:     "create",
+		EventObject:     "deal",
+	}); err != nil {
+		t.Fatalf("webhooksCreate: %v", err)
+	}
+	assertRequest(t, transport, "POST", "/api/v1/webhooks")
+	body := mustBody(t, transport)
+	if body["name"] != "n8n new deal" || body["subscription_url"] != "https://n8n.example.com/webhook/abc" {
+		t.Errorf("body = %v", body)
+	}
+	if body["event_action"] != "create" || body["event_object"] != "deal" {
+		t.Errorf("event fields = %v / %v", body["event_action"], body["event_object"])
+	}
+
+	ctx, _ = newWriteTestCtx(t)
+	if _, err := webhooksCreate(ctx, WebhooksCreateParams{
+		Name: "x", SubscriptionURL: "https://x", EventAction: "created", EventObject: "deal",
+	}); err == nil {
+		t.Fatal("expected error for invalid event_action (v1 uses create|change|delete|*)")
+	}
+}
+
+func TestWebhooksList_And_Delete(t *testing.T) {
+	ctx, transport := newTestCtx(t)
+	if _, err := webhooksList(ctx, WebhooksListParams{}); err != nil {
+		t.Fatalf("webhooksList: %v", err)
+	}
+	assertRequest(t, transport, "GET", "/api/v1/webhooks")
+
+	ctx, transport = newWriteTestCtx(t)
+	if _, err := webhooksDelete(ctx, WebhooksDeleteParams{ID: 4}); err != nil {
+		t.Fatalf("webhooksDelete: %v", err)
+	}
+	assertRequest(t, transport, "DELETE", "/api/v1/webhooks/4")
+
+	// Delete is gated on BOTH flags — write-only must refuse.
+	ctx, _ = newTestCtx(t)
+	ctx = pipedrive.WithConfig(ctx, pipedrive.Config{AllowWrite: true})
+	res, err := webhooksDelete(ctx, WebhooksDeleteParams{ID: 4})
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	if d, ok := res.(disabledResult); !ok || d.Error != "delete_disabled" {
+		t.Fatalf("expected delete_disabled, got %+v", res)
+	}
 }

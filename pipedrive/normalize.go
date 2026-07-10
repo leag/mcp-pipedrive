@@ -13,6 +13,8 @@ type NormalizedDeal struct {
 	OrganizationID int64          `json:"organization_id,omitempty"`
 	PipelineID     int64          `json:"pipeline_id,omitempty"`
 	StageID        int64          `json:"stage_id,omitempty"`
+	LabelIDs       []int64        `json:"label_ids,omitempty"`
+	IsArchived     bool           `json:"is_archived,omitempty"`
 	AddTime        string         `json:"add_time,omitempty"`
 	UpdateTime     string         `json:"update_time,omitempty"`
 	CustomFields   map[string]any `json:"custom_fields,omitempty"`
@@ -43,6 +45,15 @@ func NormalizeDeal(raw map[string]any) NormalizedDeal {
 	if cf, ok := raw["custom_fields"].(map[string]any); ok {
 		d.CustomFields = cf
 	}
+
+	if arr, ok := raw["label_ids"].([]any); ok {
+		for _, v := range arr {
+			if id := toInt64(v); id != 0 {
+				d.LabelIDs = append(d.LabelIDs, id)
+			}
+		}
+	}
+	d.IsArchived = toBool(raw["is_archived"])
 
 	return d
 }
@@ -358,6 +369,44 @@ func NormalizeFilterList(raw []any) []NormalizedFilter {
 	return out
 }
 
+// NormalizedWebhook is the stable shape for a Pipedrive webhook subscription.
+// HTTP auth credentials are intentionally omitted.
+type NormalizedWebhook struct {
+	ID              int64  `json:"id"`
+	Name            string `json:"name,omitempty"`
+	SubscriptionURL string `json:"subscription_url"`
+	EventAction     string `json:"event_action"`
+	EventObject     string `json:"event_object"`
+	UserID          int64  `json:"user_id,omitempty"`
+	IsActive        bool   `json:"is_active"`
+	Version         string `json:"version,omitempty"`
+	AddTime         string `json:"add_time,omitempty"`
+}
+
+func NormalizeWebhook(raw map[string]any) NormalizedWebhook {
+	return NormalizedWebhook{
+		ID:              toInt64(raw["id"]),
+		Name:            toString(raw["name"]),
+		SubscriptionURL: toString(raw["subscription_url"]),
+		EventAction:     toString(raw["event_action"]),
+		EventObject:     toString(raw["event_object"]),
+		UserID:          relatedID(raw, "user_id"),
+		IsActive:        toBool(firstNonNil(raw, "is_active", "active_flag")),
+		Version:         toString(raw["version"]),
+		AddTime:         toString(raw["add_time"]),
+	}
+}
+
+func NormalizeWebhookList(raw []any) []NormalizedWebhook {
+	out := make([]NormalizedWebhook, 0, len(raw))
+	for _, v := range raw {
+		if m, ok := v.(map[string]any); ok {
+			out = append(out, NormalizeWebhook(m))
+		}
+	}
+	return out
+}
+
 // ProductPrice is Pipedrive's per-currency price block.
 type ProductPrice struct {
 	Currency     string  `json:"currency"`
@@ -461,18 +510,18 @@ func NormalizeFollowerList(raw []any) []NormalizedFollower {
 
 // NormalizedDealProduct represents a product attached to a deal.
 type NormalizedDealProduct struct {
-	ID          int64   `json:"id"`
-	DealID      int64   `json:"deal_id"`
-	ProductID   int64   `json:"product_id"`
-	Name        string  `json:"name,omitempty"`
-	Quantity    float64 `json:"quantity"`
-	ItemPrice   float64 `json:"item_price,omitempty"`
-	Discount    float64 `json:"discount,omitempty"`
-	DiscountType string `json:"discount_type,omitempty"`
-	Tax         float64 `json:"tax,omitempty"`
-	Currency    string  `json:"currency,omitempty"`
-	Comments    string  `json:"comments,omitempty"`
-	AddTime     string  `json:"add_time,omitempty"`
+	ID           int64   `json:"id"`
+	DealID       int64   `json:"deal_id"`
+	ProductID    int64   `json:"product_id"`
+	Name         string  `json:"name,omitempty"`
+	Quantity     float64 `json:"quantity"`
+	ItemPrice    float64 `json:"item_price,omitempty"`
+	Discount     float64 `json:"discount,omitempty"`
+	DiscountType string  `json:"discount_type,omitempty"`
+	Tax          float64 `json:"tax,omitempty"`
+	Currency     string  `json:"currency,omitempty"`
+	Comments     string  `json:"comments,omitempty"`
+	AddTime      string  `json:"add_time,omitempty"`
 }
 
 func NormalizeDealProduct(raw map[string]any) NormalizedDealProduct {
@@ -504,18 +553,18 @@ func NormalizeDealProductList(raw []any) []NormalizedDealProduct {
 
 // NormalizedLead is the stable shape for a Pipedrive lead (v1 only).
 type NormalizedLead struct {
-	ID             string         `json:"id"`
-	Title          string         `json:"title"`
-	OwnerID        int64          `json:"owner_id,omitempty"`
-	PersonID       int64          `json:"person_id,omitempty"`
-	OrganizationID int64          `json:"organization_id,omitempty"`
-	Value          float64        `json:"value,omitempty"`
-	Currency       string         `json:"currency,omitempty"`
-	ExpectedCloseDate string      `json:"expected_close_date,omitempty"`
-	LabelIDs       []string       `json:"label_ids,omitempty"`
-	AddTime        string         `json:"add_time,omitempty"`
-	UpdateTime     string         `json:"update_time,omitempty"`
-	CustomFields   map[string]any `json:"custom_fields,omitempty"`
+	ID                string         `json:"id"`
+	Title             string         `json:"title"`
+	OwnerID           int64          `json:"owner_id,omitempty"`
+	PersonID          int64          `json:"person_id,omitempty"`
+	OrganizationID    int64          `json:"organization_id,omitempty"`
+	Value             float64        `json:"value,omitempty"`
+	Currency          string         `json:"currency,omitempty"`
+	ExpectedCloseDate string         `json:"expected_close_date,omitempty"`
+	LabelIDs          []string       `json:"label_ids,omitempty"`
+	AddTime           string         `json:"add_time,omitempty"`
+	UpdateTime        string         `json:"update_time,omitempty"`
+	CustomFields      map[string]any `json:"custom_fields,omitempty"`
 }
 
 func NormalizeLead(raw map[string]any) NormalizedLead {
