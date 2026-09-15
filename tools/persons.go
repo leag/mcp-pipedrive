@@ -47,7 +47,7 @@ type PersonsCreateParams struct {
 	Phones         []pipedrive.Contact `json:"phones,omitempty" jsonschema:"description=List of {value,label,primary} phone entries"`
 	OwnerID        int64               `json:"owner_id,omitempty" jsonschema:"description=Owner user ID"`
 	OrganizationID int64               `json:"organization_id,omitempty" jsonschema:"description=Linked organization ID"`
-	CustomFields   map[string]any      `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs"`
+	CustomFields   map[string]any      `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs. Keys may be the field name as returned by reads (e.g. '# of devices') or the 40-char field key; enum/set values may be the option label (e.g. 'full_suite') or its numeric ID"`
 }
 
 type PersonsUpdateParams struct {
@@ -57,7 +57,7 @@ type PersonsUpdateParams struct {
 	Phones         []pipedrive.Contact `json:"phones,omitempty" jsonschema:"description=Replace phone list"`
 	OwnerID        int64               `json:"owner_id,omitempty" jsonschema:"description=New owner user ID"`
 	OrganizationID int64               `json:"organization_id,omitempty" jsonschema:"description=New organization ID"`
-	CustomFields   map[string]any      `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs to merge"`
+	CustomFields   map[string]any      `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs to merge. Keys may be the field name as returned by reads (e.g. '# of devices') or the 40-char field key; enum/set values may be the option label (e.g. 'full_suite') or its numeric ID"`
 }
 
 type PersonsDeleteParams struct {
@@ -107,7 +107,10 @@ func personsList(ctx context.Context, args PersonsListParams) (any, error) {
 		return nil, wrapAPIError(err)
 	}
 	raw, arr := extractListData(payload)
-	data := map[string]any{"persons": pipedrive.NormalizePersonList(arr)}
+	items := pipedrive.NormalizePersonList(arr)
+	decodeCustomFields[pipedrive.NormalizedPerson](ctx, client, pipedrive.FieldEntityPerson, mode, items)
+	decodeCustomFields[pipedrive.NormalizedPerson](ctx, client, pipedrive.FieldEntityPerson, mode, items)
+	data := map[string]any{"persons": items}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
 	}
@@ -146,7 +149,9 @@ func personsGet(ctx context.Context, args PersonsGetParams) (any, error) {
 		return nil, wrapAPIError(err)
 	}
 	raw, m := extractItemData(payload)
-	data := map[string]any{"person": pipedrive.NormalizePerson(m)}
+	item := pipedrive.NormalizePerson(m)
+	decodeOneCustomFields[pipedrive.NormalizedPerson](ctx, client, pipedrive.FieldEntityPerson, mode, &item)
+	data := map[string]any{"person": item}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
 	}
@@ -221,8 +226,8 @@ func personsCreate(ctx context.Context, args PersonsCreateParams) (any, error) {
 	}
 	setIfNonZeroInt(body, "owner_id", args.OwnerID)
 	setIfNonZeroInt(body, "org_id", args.OrganizationID)
-	if len(args.CustomFields) > 0 {
-		body["custom_fields"] = args.CustomFields
+	if err := setCustomFields(ctx, client, pipedrive.FieldEntityPerson, body, args.CustomFields); err != nil {
+		return nil, err
 	}
 	req, err := client.NewRequest(pipedrive.V2, http.MethodPost, "/persons", nil, body)
 	if err != nil {
@@ -234,7 +239,9 @@ func personsCreate(ctx context.Context, args PersonsCreateParams) (any, error) {
 	}
 	invalidatePersonsCache(client, 0)
 	raw, m := extractItemData(payload)
-	return internal.Wrap(map[string]any{"person": pipedrive.NormalizePerson(m), "raw": internal.MaskSensitive(raw)}, nil), nil
+	item := pipedrive.NormalizePerson(m)
+	decodeOneCustomFields[pipedrive.NormalizedPerson](ctx, client, pipedrive.FieldEntityPerson, pipedrive.CacheModeDefault, &item)
+	return internal.Wrap(map[string]any{"person": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
 func personsUpdate(ctx context.Context, args PersonsUpdateParams) (any, error) {
@@ -260,8 +267,8 @@ func personsUpdate(ctx context.Context, args PersonsUpdateParams) (any, error) {
 	}
 	setIfNonZeroInt(body, "owner_id", args.OwnerID)
 	setIfNonZeroInt(body, "org_id", args.OrganizationID)
-	if len(args.CustomFields) > 0 {
-		body["custom_fields"] = args.CustomFields
+	if err := setCustomFields(ctx, client, pipedrive.FieldEntityPerson, body, args.CustomFields); err != nil {
+		return nil, err
 	}
 	if len(body) == 0 {
 		return nil, fmt.Errorf("no fields to update")
@@ -277,7 +284,9 @@ func personsUpdate(ctx context.Context, args PersonsUpdateParams) (any, error) {
 	}
 	invalidatePersonsCache(client, args.ID)
 	raw, m := extractItemData(payload)
-	return internal.Wrap(map[string]any{"person": pipedrive.NormalizePerson(m), "raw": internal.MaskSensitive(raw)}, nil), nil
+	item := pipedrive.NormalizePerson(m)
+	decodeOneCustomFields[pipedrive.NormalizedPerson](ctx, client, pipedrive.FieldEntityPerson, pipedrive.CacheModeDefault, &item)
+	return internal.Wrap(map[string]any{"person": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
 func personsDelete(ctx context.Context, args PersonsDeleteParams) (any, error) {
@@ -350,4 +359,3 @@ var PersonsDelete = mcppipedrive.MustTool("pipedrive.persons.delete",
 	"Delete a person (write+delete). Requires PIPEDRIVE_ALLOW_WRITE=true AND PIPEDRIVE_ALLOW_DELETE=true.",
 	personsDelete,
 	mcp.WithTitleAnnotation("Delete person"), mcp.WithDestructiveHintAnnotation(true))
-

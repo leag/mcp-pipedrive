@@ -99,6 +99,7 @@ Set `PIPEDRIVE_DOMAIN` to your Pipedrive subdomain, e.g. `mycompany.pipedrive.co
 - `pipedrive.organizations.{create,update}`
 - `pipedrive.products.{create,update}`
 - `pipedrive.filters.{create,update}` — saved filters for server-side (incl. custom-field) filtering
+- Custom fields are returned by name with option labels and accepted the same way on write — see [docs/custom-fields.md](docs/custom-fields.md)
 - `pipedrive.leads.{create,update}`
 - `pipedrive.activities.{create,update,batch_create}` — batch_create supports up to 100 activities per call
 - `pipedrive.notes.create`

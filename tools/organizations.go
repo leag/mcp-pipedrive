@@ -43,7 +43,7 @@ type OrganizationsCreateParams struct {
 	Name         string         `json:"name" jsonschema:"description=Organization name"`
 	OwnerID      int64          `json:"owner_id,omitempty" jsonschema:"description=Owner user ID"`
 	Address      string         `json:"address,omitempty" jsonschema:"description=Free-form postal address"`
-	CustomFields map[string]any `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs"`
+	CustomFields map[string]any `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs. Keys may be the field name as returned by reads (e.g. '# of devices') or the 40-char field key; enum/set values may be the option label (e.g. 'full_suite') or its numeric ID"`
 }
 
 type OrganizationsUpdateParams struct {
@@ -51,7 +51,7 @@ type OrganizationsUpdateParams struct {
 	Name         string         `json:"name,omitempty" jsonschema:"description=New name"`
 	OwnerID      int64          `json:"owner_id,omitempty" jsonschema:"description=New owner user ID"`
 	Address      string         `json:"address,omitempty" jsonschema:"description=New address"`
-	CustomFields map[string]any `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs to merge"`
+	CustomFields map[string]any `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs to merge. Keys may be the field name as returned by reads (e.g. '# of devices') or the 40-char field key; enum/set values may be the option label (e.g. 'full_suite') or its numeric ID"`
 }
 
 type OrganizationsDeleteParams struct {
@@ -98,7 +98,10 @@ func organizationsList(ctx context.Context, args OrganizationsListParams) (any, 
 		return nil, wrapAPIError(err)
 	}
 	raw, arr := extractListData(payload)
-	data := map[string]any{"organizations": pipedrive.NormalizeOrganizationList(arr)}
+	items := pipedrive.NormalizeOrganizationList(arr)
+	decodeCustomFields[pipedrive.NormalizedOrganization](ctx, client, pipedrive.FieldEntityOrganization, mode, items)
+	decodeCustomFields[pipedrive.NormalizedOrganization](ctx, client, pipedrive.FieldEntityOrganization, mode, items)
+	data := map[string]any{"organizations": items}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
 	}
@@ -137,7 +140,9 @@ func organizationsGet(ctx context.Context, args OrganizationsGetParams) (any, er
 		return nil, wrapAPIError(err)
 	}
 	raw, m := extractItemData(payload)
-	data := map[string]any{"organization": pipedrive.NormalizeOrganization(m)}
+	item := pipedrive.NormalizeOrganization(m)
+	decodeOneCustomFields[pipedrive.NormalizedOrganization](ctx, client, pipedrive.FieldEntityOrganization, mode, &item)
+	data := map[string]any{"organization": item}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
 	}
@@ -203,8 +208,8 @@ func organizationsCreate(ctx context.Context, args OrganizationsCreateParams) (a
 	body := map[string]any{"name": args.Name}
 	setIfNonZeroInt(body, "owner_id", args.OwnerID)
 	setIfNonZero(body, "address", args.Address)
-	if len(args.CustomFields) > 0 {
-		body["custom_fields"] = args.CustomFields
+	if err := setCustomFields(ctx, client, pipedrive.FieldEntityOrganization, body, args.CustomFields); err != nil {
+		return nil, err
 	}
 	req, err := client.NewRequest(pipedrive.V2, http.MethodPost, "/organizations", nil, body)
 	if err != nil {
@@ -216,7 +221,9 @@ func organizationsCreate(ctx context.Context, args OrganizationsCreateParams) (a
 	}
 	invalidateOrganizationsCache(client, 0)
 	raw, m := extractItemData(payload)
-	return internal.Wrap(map[string]any{"organization": pipedrive.NormalizeOrganization(m), "raw": internal.MaskSensitive(raw)}, nil), nil
+	item := pipedrive.NormalizeOrganization(m)
+	decodeOneCustomFields[pipedrive.NormalizedOrganization](ctx, client, pipedrive.FieldEntityOrganization, pipedrive.CacheModeDefault, &item)
+	return internal.Wrap(map[string]any{"organization": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
 func organizationsUpdate(ctx context.Context, args OrganizationsUpdateParams) (any, error) {
@@ -236,8 +243,8 @@ func organizationsUpdate(ctx context.Context, args OrganizationsUpdateParams) (a
 	setIfNonZero(body, "name", args.Name)
 	setIfNonZeroInt(body, "owner_id", args.OwnerID)
 	setIfNonZero(body, "address", args.Address)
-	if len(args.CustomFields) > 0 {
-		body["custom_fields"] = args.CustomFields
+	if err := setCustomFields(ctx, client, pipedrive.FieldEntityOrganization, body, args.CustomFields); err != nil {
+		return nil, err
 	}
 	if len(body) == 0 {
 		return nil, fmt.Errorf("no fields to update")
@@ -253,7 +260,9 @@ func organizationsUpdate(ctx context.Context, args OrganizationsUpdateParams) (a
 	}
 	invalidateOrganizationsCache(client, args.ID)
 	raw, m := extractItemData(payload)
-	return internal.Wrap(map[string]any{"organization": pipedrive.NormalizeOrganization(m), "raw": internal.MaskSensitive(raw)}, nil), nil
+	item := pipedrive.NormalizeOrganization(m)
+	decodeOneCustomFields[pipedrive.NormalizedOrganization](ctx, client, pipedrive.FieldEntityOrganization, pipedrive.CacheModeDefault, &item)
+	return internal.Wrap(map[string]any{"organization": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
 func organizationsDelete(ctx context.Context, args OrganizationsDeleteParams) (any, error) {
@@ -326,4 +335,3 @@ var OrganizationsDelete = mcppipedrive.MustTool("pipedrive.organizations.delete"
 	"Delete an organization (write+delete). Requires both PIPEDRIVE_ALLOW_WRITE=true AND PIPEDRIVE_ALLOW_DELETE=true.",
 	organizationsDelete,
 	mcp.WithTitleAnnotation("Delete organization"), mcp.WithDestructiveHintAnnotation(true))
-

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"testing"
 
 	"mcp-pipedrive/pipedrive"
@@ -16,12 +17,24 @@ import (
 // and returns a canned empty-list response. Lets us assert which query
 // parameters and body fields a handler actually sends upstream without
 // hitting Pipedrive.
+//
+// Custom-field metadata requests (/dealFields and friends) are incidental —
+// handlers fetch them to translate hash keys into field names, and in
+// production they are served from cache. They are counted but excluded from
+// `last`, so assertions keep pointing at the request under test.
 type captureTransport struct {
-	last     *http.Request
-	lastBody []byte
+	last      *http.Request
+	lastBody  []byte
+	metaCalls int
 }
 
+var metadataPathRe = regexp.MustCompile(`/(deal|person|organization|product)Fields$`)
+
 func (c *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if metadataPathRe.MatchString(req.URL.Path) {
+		c.metaCalls++
+		return jsonResponse(req, `{"success":true,"data":[]}`), nil
+	}
 	c.last = req
 	c.lastBody = nil
 	if req.Body != nil {
@@ -29,14 +42,17 @@ func (c *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		c.lastBody = b
 		req.Body = io.NopCloser(bytes.NewReader(b))
 	}
-	body := bytes.NewBufferString(`{"success":true,"data":[]}`)
+	return jsonResponse(req, `{"success":true,"data":[]}`), nil
+}
+
+func jsonResponse(req *http.Request, body string) *http.Response {
 	return &http.Response{
 		StatusCode: 200,
 		Status:     "200 OK",
-		Body:       io.NopCloser(body),
+		Body:       io.NopCloser(bytes.NewBufferString(body)),
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Request:    req,
-	}, nil
+	}
 }
 
 func newTestCtx(t *testing.T) (context.Context, *captureTransport) {

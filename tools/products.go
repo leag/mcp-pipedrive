@@ -41,24 +41,24 @@ type ProductsSearchParams struct {
 }
 
 type ProductsCreateParams struct {
-	Name         string                  `json:"name" jsonschema:"description=Product name"`
-	Code         string                  `json:"code,omitempty" jsonschema:"description=Product code/SKU"`
-	Unit         string                  `json:"unit,omitempty" jsonschema:"description=Unit of measure (e.g. hour piece)"`
-	Active       *bool                   `json:"active,omitempty" jsonschema:"description=Active flag (default true)"`
-	OwnerID      int64                   `json:"owner_id,omitempty" jsonschema:"description=Owner user ID"`
+	Name         string                   `json:"name" jsonschema:"description=Product name"`
+	Code         string                   `json:"code,omitempty" jsonschema:"description=Product code/SKU"`
+	Unit         string                   `json:"unit,omitempty" jsonschema:"description=Unit of measure (e.g. hour piece)"`
+	Active       *bool                    `json:"active,omitempty" jsonschema:"description=Active flag (default true)"`
+	OwnerID      int64                    `json:"owner_id,omitempty" jsonschema:"description=Owner user ID"`
 	Prices       []pipedrive.ProductPrice `json:"prices,omitempty" jsonschema:"description=Per-currency prices"`
-	CustomFields map[string]any          `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs"`
+	CustomFields map[string]any           `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs. Keys may be the field name as returned by reads (e.g. '# of devices') or the 40-char field key; enum/set values may be the option label (e.g. 'full_suite') or its numeric ID"`
 }
 
 type ProductsUpdateParams struct {
-	ID           int64                   `json:"id" jsonschema:"description=Product ID to update"`
-	Name         string                  `json:"name,omitempty" jsonschema:"description=New name"`
-	Code         string                  `json:"code,omitempty" jsonschema:"description=New code/SKU"`
-	Unit         string                  `json:"unit,omitempty" jsonschema:"description=New unit"`
-	Active       *bool                   `json:"active,omitempty" jsonschema:"description=New active flag"`
-	OwnerID      int64                   `json:"owner_id,omitempty" jsonschema:"description=New owner user ID"`
+	ID           int64                    `json:"id" jsonschema:"description=Product ID to update"`
+	Name         string                   `json:"name,omitempty" jsonschema:"description=New name"`
+	Code         string                   `json:"code,omitempty" jsonschema:"description=New code/SKU"`
+	Unit         string                   `json:"unit,omitempty" jsonschema:"description=New unit"`
+	Active       *bool                    `json:"active,omitempty" jsonschema:"description=New active flag"`
+	OwnerID      int64                    `json:"owner_id,omitempty" jsonschema:"description=New owner user ID"`
 	Prices       []pipedrive.ProductPrice `json:"prices,omitempty" jsonschema:"description=Replace per-currency prices"`
-	CustomFields map[string]any          `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs to merge"`
+	CustomFields map[string]any           `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs to merge. Keys may be the field name as returned by reads (e.g. '# of devices') or the 40-char field key; enum/set values may be the option label (e.g. 'full_suite') or its numeric ID"`
 }
 
 type ProductsDeleteParams struct {
@@ -108,7 +108,10 @@ func productsList(ctx context.Context, args ProductsListParams) (any, error) {
 		return nil, wrapAPIError(err)
 	}
 	raw, arr := extractListData(payload)
-	data := map[string]any{"products": pipedrive.NormalizeProductList(arr)}
+	items := pipedrive.NormalizeProductList(arr)
+	decodeCustomFields[pipedrive.NormalizedProduct](ctx, client, pipedrive.FieldEntityProduct, mode, items)
+	decodeCustomFields[pipedrive.NormalizedProduct](ctx, client, pipedrive.FieldEntityProduct, mode, items)
+	data := map[string]any{"products": items}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
 	}
@@ -147,7 +150,9 @@ func productsGet(ctx context.Context, args ProductsGetParams) (any, error) {
 		return nil, wrapAPIError(err)
 	}
 	raw, m := extractItemData(payload)
-	data := map[string]any{"product": pipedrive.NormalizeProduct(m)}
+	item := pipedrive.NormalizeProduct(m)
+	decodeOneCustomFields[pipedrive.NormalizedProduct](ctx, client, pipedrive.FieldEntityProduct, mode, &item)
+	data := map[string]any{"product": item}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
 	}
@@ -220,8 +225,8 @@ func productsCreate(ctx context.Context, args ProductsCreateParams) (any, error)
 	if len(args.Prices) > 0 {
 		body["prices"] = args.Prices
 	}
-	if len(args.CustomFields) > 0 {
-		body["custom_fields"] = args.CustomFields
+	if err := setCustomFields(ctx, client, pipedrive.FieldEntityProduct, body, args.CustomFields); err != nil {
+		return nil, err
 	}
 	req, err := client.NewRequest(pipedrive.V2, http.MethodPost, "/products", nil, body)
 	if err != nil {
@@ -233,7 +238,9 @@ func productsCreate(ctx context.Context, args ProductsCreateParams) (any, error)
 	}
 	invalidateProductsCache(client, 0)
 	raw, m := extractItemData(payload)
-	return internal.Wrap(map[string]any{"product": pipedrive.NormalizeProduct(m), "raw": internal.MaskSensitive(raw)}, nil), nil
+	item := pipedrive.NormalizeProduct(m)
+	decodeOneCustomFields[pipedrive.NormalizedProduct](ctx, client, pipedrive.FieldEntityProduct, pipedrive.CacheModeDefault, &item)
+	return internal.Wrap(map[string]any{"product": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
 func productsUpdate(ctx context.Context, args ProductsUpdateParams) (any, error) {
@@ -260,8 +267,8 @@ func productsUpdate(ctx context.Context, args ProductsUpdateParams) (any, error)
 	if len(args.Prices) > 0 {
 		body["prices"] = args.Prices
 	}
-	if len(args.CustomFields) > 0 {
-		body["custom_fields"] = args.CustomFields
+	if err := setCustomFields(ctx, client, pipedrive.FieldEntityProduct, body, args.CustomFields); err != nil {
+		return nil, err
 	}
 	if len(body) == 0 {
 		return nil, fmt.Errorf("no fields to update")
@@ -277,7 +284,9 @@ func productsUpdate(ctx context.Context, args ProductsUpdateParams) (any, error)
 	}
 	invalidateProductsCache(client, args.ID)
 	raw, m := extractItemData(payload)
-	return internal.Wrap(map[string]any{"product": pipedrive.NormalizeProduct(m), "raw": internal.MaskSensitive(raw)}, nil), nil
+	item := pipedrive.NormalizeProduct(m)
+	decodeOneCustomFields[pipedrive.NormalizedProduct](ctx, client, pipedrive.FieldEntityProduct, pipedrive.CacheModeDefault, &item)
+	return internal.Wrap(map[string]any{"product": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
 func productsDelete(ctx context.Context, args ProductsDeleteParams) (any, error) {
@@ -350,4 +359,3 @@ var ProductsDelete = mcppipedrive.MustTool("pipedrive.products.delete",
 	"Delete a product (write+delete). Requires PIPEDRIVE_ALLOW_WRITE=true AND PIPEDRIVE_ALLOW_DELETE=true.",
 	productsDelete,
 	mcp.WithTitleAnnotation("Delete product"), mcp.WithDestructiveHintAnnotation(true))
-

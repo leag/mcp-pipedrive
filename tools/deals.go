@@ -62,7 +62,7 @@ type DealsCreateParams struct {
 	PipelineID     int64          `json:"pipeline_id,omitempty" jsonschema:"description=Pipeline ID"`
 	StageID        int64          `json:"stage_id,omitempty" jsonschema:"description=Stage ID"`
 	Status         string         `json:"status,omitempty" jsonschema:"description=Status: open|won|lost"`
-	CustomFields   map[string]any `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs"`
+	CustomFields   map[string]any `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs. Keys may be the field name as returned by reads (e.g. '# of devices') or the 40-char field key; enum/set values may be the option label (e.g. 'full_suite') or its numeric ID"`
 }
 
 type DealsUpdateParams struct {
@@ -77,7 +77,7 @@ type DealsUpdateParams struct {
 	StageID        int64          `json:"stage_id,omitempty" jsonschema:"description=New stage ID"`
 	Status         string         `json:"status,omitempty" jsonschema:"description=New status: open|won|lost"`
 	LabelIDs       *[]int64       `json:"label_ids,omitempty" jsonschema:"description=Replace the deal's labels with these label option IDs (empty array clears all labels). Resolve option IDs from the deal label field options in pipedrive.context.get deal_fields"`
-	CustomFields   map[string]any `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs to merge"`
+	CustomFields   map[string]any `json:"custom_fields,omitempty" jsonschema:"description=Custom field key-value pairs to merge. Keys may be the field name as returned by reads (e.g. '# of devices') or the 40-char field key; enum/set values may be the option label (e.g. 'full_suite') or its numeric ID"`
 }
 
 type DealsDeleteParams struct {
@@ -165,6 +165,7 @@ func dealsList(ctx context.Context, args DealsListParams) (any, error) {
 
 	raw, dealsArr := extractListData(payload)
 	normalized := pipedrive.NormalizeDealList(dealsArr)
+	decodeCustomFields[pipedrive.NormalizedDeal](ctx, client, pipedrive.FieldEntityDeal, mode, normalized)
 
 	meta := map[string]any{
 		"limit": effectiveLimit(args.Limit),
@@ -211,6 +212,7 @@ func dealsGet(ctx context.Context, args DealsGetParams) (any, error) {
 
 	raw, dealRaw := extractItemData(payload)
 	deal := pipedrive.NormalizeDeal(dealRaw)
+	decodeOneCustomFields[pipedrive.NormalizedDeal](ctx, client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &deal)
 	data := map[string]any{"deal": deal}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
@@ -290,8 +292,8 @@ func dealsCreate(ctx context.Context, args DealsCreateParams) (any, error) {
 	setIfNonZeroInt(body, "pipeline_id", args.PipelineID)
 	setIfNonZeroInt(body, "stage_id", args.StageID)
 	setIfNonZero(body, "status", args.Status)
-	if len(args.CustomFields) > 0 {
-		body["custom_fields"] = args.CustomFields
+	if err := setCustomFields(ctx, client, pipedrive.FieldEntityDeal, body, args.CustomFields); err != nil {
+		return nil, err
 	}
 
 	req, err := client.NewRequest(pipedrive.V2, http.MethodPost, "/deals", nil, body)
@@ -305,6 +307,7 @@ func dealsCreate(ctx context.Context, args DealsCreateParams) (any, error) {
 	invalidateDealsCache(client, 0)
 	raw, dealRaw := extractItemData(payload)
 	deal := pipedrive.NormalizeDeal(dealRaw)
+	decodeOneCustomFields[pipedrive.NormalizedDeal](ctx, client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &deal)
 	return internal.Wrap(map[string]any{"deal": deal, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
@@ -334,8 +337,8 @@ func dealsUpdate(ctx context.Context, args DealsUpdateParams) (any, error) {
 	setIfNonZeroInt(body, "pipeline_id", args.PipelineID)
 	setIfNonZeroInt(body, "stage_id", args.StageID)
 	setIfNonZero(body, "status", args.Status)
-	if len(args.CustomFields) > 0 {
-		body["custom_fields"] = args.CustomFields
+	if err := setCustomFields(ctx, client, pipedrive.FieldEntityDeal, body, args.CustomFields); err != nil {
+		return nil, err
 	}
 	if args.LabelIDs != nil {
 		body["label_ids"] = *args.LabelIDs
@@ -356,6 +359,7 @@ func dealsUpdate(ctx context.Context, args DealsUpdateParams) (any, error) {
 	invalidateDealsCache(client, args.ID)
 	raw, dealRaw := extractItemData(payload)
 	deal := pipedrive.NormalizeDeal(dealRaw)
+	decodeOneCustomFields[pipedrive.NormalizedDeal](ctx, client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &deal)
 	return internal.Wrap(map[string]any{"deal": deal, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
@@ -415,6 +419,7 @@ func dealsSetArchived(ctx context.Context, toolName string, id int64, archived b
 	invalidateDealsCache(client, id)
 	raw, dealRaw := extractItemData(payload)
 	deal := pipedrive.NormalizeDeal(dealRaw)
+	decodeOneCustomFields[pipedrive.NormalizedDeal](ctx, client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &deal)
 	return internal.Wrap(map[string]any{"deal": deal, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
