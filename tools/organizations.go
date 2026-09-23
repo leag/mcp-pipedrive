@@ -99,8 +99,7 @@ func organizationsList(ctx context.Context, args OrganizationsListParams) (any, 
 	}
 	raw, arr := extractListData(payload)
 	items := pipedrive.NormalizeOrganizationList(arr)
-	decodeCustomFields[pipedrive.NormalizedOrganization](ctx, client, pipedrive.FieldEntityOrganization, mode, items)
-	decodeCustomFields[pipedrive.NormalizedOrganization](ctx, client, pipedrive.FieldEntityOrganization, mode, items)
+	decodeCustomFields(client, pipedrive.FieldEntityOrganization, mode, items)
 	data := map[string]any{"organizations": items}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
@@ -141,7 +140,7 @@ func organizationsGet(ctx context.Context, args OrganizationsGetParams) (any, er
 	}
 	raw, m := extractItemData(payload)
 	item := pipedrive.NormalizeOrganization(m)
-	decodeOneCustomFields[pipedrive.NormalizedOrganization](ctx, client, pipedrive.FieldEntityOrganization, mode, &item)
+	decodeOneCustomFields(client, pipedrive.FieldEntityOrganization, mode, &item)
 	data := map[string]any{"organization": item}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
@@ -208,7 +207,7 @@ func organizationsCreate(ctx context.Context, args OrganizationsCreateParams) (a
 	body := map[string]any{"name": args.Name}
 	setIfNonZeroInt(body, "owner_id", args.OwnerID)
 	setIfNonZero(body, "address", args.Address)
-	if err := setCustomFields(ctx, client, pipedrive.FieldEntityOrganization, body, args.CustomFields); err != nil {
+	if err := setCustomFields(client, pipedrive.FieldEntityOrganization, body, args.CustomFields); err != nil {
 		return nil, err
 	}
 	req, err := client.NewRequest(pipedrive.V2, http.MethodPost, "/organizations", nil, body)
@@ -222,7 +221,7 @@ func organizationsCreate(ctx context.Context, args OrganizationsCreateParams) (a
 	invalidateOrganizationsCache(client, 0)
 	raw, m := extractItemData(payload)
 	item := pipedrive.NormalizeOrganization(m)
-	decodeOneCustomFields[pipedrive.NormalizedOrganization](ctx, client, pipedrive.FieldEntityOrganization, pipedrive.CacheModeDefault, &item)
+	decodeOneCustomFields(client, pipedrive.FieldEntityOrganization, pipedrive.CacheModeDefault, &item)
 	return internal.Wrap(map[string]any{"organization": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
@@ -243,7 +242,7 @@ func organizationsUpdate(ctx context.Context, args OrganizationsUpdateParams) (a
 	setIfNonZero(body, "name", args.Name)
 	setIfNonZeroInt(body, "owner_id", args.OwnerID)
 	setIfNonZero(body, "address", args.Address)
-	if err := setCustomFields(ctx, client, pipedrive.FieldEntityOrganization, body, args.CustomFields); err != nil {
+	if err := setCustomFields(client, pipedrive.FieldEntityOrganization, body, args.CustomFields); err != nil {
 		return nil, err
 	}
 	if len(body) == 0 {
@@ -261,7 +260,7 @@ func organizationsUpdate(ctx context.Context, args OrganizationsUpdateParams) (a
 	invalidateOrganizationsCache(client, args.ID)
 	raw, m := extractItemData(payload)
 	item := pipedrive.NormalizeOrganization(m)
-	decodeOneCustomFields[pipedrive.NormalizedOrganization](ctx, client, pipedrive.FieldEntityOrganization, pipedrive.CacheModeDefault, &item)
+	decodeOneCustomFields(client, pipedrive.FieldEntityOrganization, pipedrive.CacheModeDefault, &item)
 	return internal.Wrap(map[string]any{"organization": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 

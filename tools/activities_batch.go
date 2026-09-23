@@ -48,44 +48,48 @@ func activitiesBatchCreate(ctx context.Context, args ActivitiesBatchCreateParams
 	}
 
 	results := make([]batchItemResult, 0, len(args.Activities))
-	succeeded, failed := 0, 0
+	succeeded := 0
 	for i, item := range args.Activities {
-		if err := ctx.Err(); err != nil {
-			return nil, err
+		// On cancellation stop, but still report and invalidate what was
+		// already created so a retry does not duplicate it.
+		if ctx.Err() != nil {
+			break
 		}
+		var errMsg string
 		if item.Subject == "" {
-			failed++
-			results = append(results, batchItemResult{Index: i, Error: "subject is required"})
-			if args.StopOnError {
-				break
+			errMsg = "subject is required"
+		} else {
+			req, err := client.NewRequest(pipedrive.V2, http.MethodPost, "/activities", nil, activityCreateBody(item))
+			if err != nil {
+				return nil, err
 			}
-			continue
-		}
-		req, err := client.NewRequest(pipedrive.V2, http.MethodPost, "/activities", nil, activityCreateBody(item))
-		if err != nil {
-			return nil, err
-		}
-		var payload any
-		if err := client.DoJSON(req.WithContext(ctx), &payload); err != nil {
-			failed++
-			results = append(results, batchItemResult{Index: i, Error: wrapAPIError(err).Error()})
-			if args.StopOnError {
-				break
+			var payload any
+			if err := client.DoJSON(req.WithContext(ctx), &payload); err != nil {
+				errMsg = wrapAPIError(err).Error()
+			} else {
+				_, m := extractItemData(payload)
+				succeeded++
+				results = append(results, batchItemResult{Index: i, OK: true, Activity: pipedrive.NormalizeActivity(m)})
+				continue
 			}
-			continue
 		}
-		_, m := extractItemData(payload)
-		succeeded++
-		results = append(results, batchItemResult{Index: i, OK: true, Activity: pipedrive.NormalizeActivity(m)})
+		results = append(results, batchItemResult{Index: i, Error: errMsg})
+		if args.StopOnError {
+			break
+		}
 	}
 	if succeeded > 0 {
 		invalidateActivitiesCache(client, 0)
 	}
-	return internal.Wrap(map[string]any{
+	out := map[string]any{
 		"results":   results,
 		"succeeded": succeeded,
-		"failed":    failed,
-	}, nil), nil
+		"failed":    len(results) - succeeded,
+	}
+	if ctx.Err() != nil {
+		out["cancelled"] = true
+	}
+	return internal.Wrap(out, nil), nil
 }
 
 var ActivitiesBatchCreate = mcppipedrive.MustTool(

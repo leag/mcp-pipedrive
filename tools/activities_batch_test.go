@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -72,5 +73,26 @@ func TestActivitiesBatchCreate_Validation(t *testing.T) {
 	}
 	if _, err := activitiesBatchCreate(ctx, ActivitiesBatchCreateParams{Activities: tooMany}); err == nil {
 		t.Fatal("expected error for >100 items")
+	}
+}
+
+// A cancelled context stops the batch but still returns a result, so the
+// caller can see what (if anything) was created instead of retrying blindly.
+func TestActivitiesBatchCreate_CancelledReturnsPartialResult(t *testing.T) {
+	ctx, transport := newScriptedCtx(t, []string{`{"success":true,"data":{"id":1,"subject":"a"}}`})
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+	res, err := activitiesBatchCreate(ctx, ActivitiesBatchCreateParams{
+		Activities: []ActivitiesCreateParams{{Subject: "a"}, {Subject: "b"}},
+	})
+	if err != nil {
+		t.Fatalf("activitiesBatchCreate: %v", err)
+	}
+	if len(transport.requests) != 0 {
+		t.Fatalf("expected no POSTs after cancellation, got %d", len(transport.requests))
+	}
+	out, _ := json.Marshal(res)
+	if !strings.Contains(string(out), `"cancelled":true`) {
+		t.Errorf("expected cancelled=true, got %s", out)
 	}
 }

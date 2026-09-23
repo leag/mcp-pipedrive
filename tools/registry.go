@@ -65,8 +65,6 @@ func allTools() []mcppipedrive.Tool {
 		FiltersList, FiltersCreate, FiltersUpdate,
 		// mailbox
 		MailThreadsList, MailThreadsGet, MailMessagesGet, DealsMailList,
-		// webhooks
-		WebhooksList, WebhooksCreate, WebhooksDelete,
 		// cache (stats is always on; clear/invalidate behind AdminToolsEnabled)
 		CacheStats, CacheClear, CacheInvalidate,
 	}

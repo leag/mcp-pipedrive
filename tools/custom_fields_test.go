@@ -120,3 +120,48 @@ func TestDealsUpdate_RejectsUnknownFieldName(t *testing.T) {
 		t.Errorf("error should name the offending field, got: %v", err)
 	}
 }
+
+// staleFieldsTransport serves metadata missing an option on the first
+// /dealFields fetch and including it on the next, like a cache entry that
+// predates an option added in the Pipedrive UI.
+type staleFieldsTransport struct {
+	metaCalls int
+	lastBody  []byte
+}
+
+func (s *staleFieldsTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.HasSuffix(req.URL.Path, "/dealFields") {
+		s.metaCalls++
+		if s.metaCalls == 1 {
+			return jsonResponse(req, testDealFields), nil
+		}
+		return jsonResponse(req, strings.Replace(testDealFields,
+			`{"id":53,"label":"full_suite"}`, `{"id":53,"label":"full_suite"},{"id":55,"label":"enterprise"}`, 1)), nil
+	}
+	if req.Body != nil {
+		s.lastBody, _ = io.ReadAll(req.Body)
+	}
+	return jsonResponse(req, `{"success":true,"data":{"id":5}}`), nil
+}
+
+func TestDealsUpdate_RefreshesStaleMetadata(t *testing.T) {
+	transport := &staleFieldsTransport{}
+	client := &pipedrive.Client{
+		BaseURL:  "https://test.pipedrive.com",
+		HTTP:     &http.Client{Transport: transport},
+		APIToken: "test-token",
+		AuthMode: pipedrive.AuthModeToken,
+	}
+	ctx := pipedrive.WithConfig(context.Background(), pipedrive.Config{AllowWrite: true})
+	ctx = pipedrive.WithClient(ctx, client)
+
+	if _, err := dealsUpdate(ctx, DealsUpdateParams{
+		ID:           5,
+		CustomFields: map[string]any{"Prey plan": "enterprise"},
+	}); err != nil {
+		t.Fatalf("dealsUpdate: %v", err)
+	}
+	if !strings.Contains(string(transport.lastBody), `"bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222":55`) {
+		t.Errorf("new option not encoded after refresh: %s", transport.lastBody)
+	}
+}

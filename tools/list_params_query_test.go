@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"testing"
 
 	"mcp-pipedrive/pipedrive"
@@ -17,24 +16,12 @@ import (
 // and returns a canned empty-list response. Lets us assert which query
 // parameters and body fields a handler actually sends upstream without
 // hitting Pipedrive.
-//
-// Custom-field metadata requests (/dealFields and friends) are incidental —
-// handlers fetch them to translate hash keys into field names, and in
-// production they are served from cache. They are counted but excluded from
-// `last`, so assertions keep pointing at the request under test.
 type captureTransport struct {
-	last      *http.Request
-	lastBody  []byte
-	metaCalls int
+	last     *http.Request
+	lastBody []byte
 }
 
-var metadataPathRe = regexp.MustCompile(`/(deal|person|organization|product)Fields$`)
-
 func (c *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if metadataPathRe.MatchString(req.URL.Path) {
-		c.metaCalls++
-		return jsonResponse(req, `{"success":true,"data":[]}`), nil
-	}
 	c.last = req
 	c.lastBody = nil
 	if req.Body != nil {
@@ -362,16 +349,14 @@ func TestDealsArchive_WriteGate(t *testing.T) {
 }
 
 func TestDealsList_ArchivedRouting(t *testing.T) {
-	yes := true
 	ctx, transport := newTestCtx(t)
-	if _, err := dealsList(ctx, DealsListParams{IsArchived: &yes}); err != nil {
+	if _, err := dealsList(ctx, DealsListParams{IsArchived: true}); err != nil {
 		t.Fatalf("dealsList archived: %v", err)
 	}
 	assertRequest(t, transport, "GET", "/api/v2/deals/archived")
 
-	no := false
 	ctx, transport = newTestCtx(t)
-	if _, err := dealsList(ctx, DealsListParams{IsArchived: &no}); err != nil {
+	if _, err := dealsList(ctx, DealsListParams{}); err != nil {
 		t.Fatalf("dealsList non-archived: %v", err)
 	}
 	assertRequest(t, transport, "GET", "/api/v2/deals")
@@ -499,57 +484,5 @@ func TestFiltersUpdate_BodyPropagation(t *testing.T) {
 	ctx, _ = newWriteTestCtx(t)
 	if _, err := filtersUpdate(ctx, FiltersUpdateParams{ID: 12}); err == nil {
 		t.Fatal("expected error for missing conditions (required by v1 PUT)")
-	}
-}
-
-func TestWebhooksCreate_BodyPropagation(t *testing.T) {
-	ctx, transport := newWriteTestCtx(t)
-	if _, err := webhooksCreate(ctx, WebhooksCreateParams{
-		Name:            "n8n new deal",
-		SubscriptionURL: "https://n8n.example.com/webhook/abc",
-		EventAction:     "create",
-		EventObject:     "deal",
-	}); err != nil {
-		t.Fatalf("webhooksCreate: %v", err)
-	}
-	assertRequest(t, transport, "POST", "/api/v1/webhooks")
-	body := mustBody(t, transport)
-	if body["name"] != "n8n new deal" || body["subscription_url"] != "https://n8n.example.com/webhook/abc" {
-		t.Errorf("body = %v", body)
-	}
-	if body["event_action"] != "create" || body["event_object"] != "deal" {
-		t.Errorf("event fields = %v / %v", body["event_action"], body["event_object"])
-	}
-
-	ctx, _ = newWriteTestCtx(t)
-	if _, err := webhooksCreate(ctx, WebhooksCreateParams{
-		Name: "x", SubscriptionURL: "https://x", EventAction: "created", EventObject: "deal",
-	}); err == nil {
-		t.Fatal("expected error for invalid event_action (v1 uses create|change|delete|*)")
-	}
-}
-
-func TestWebhooksList_And_Delete(t *testing.T) {
-	ctx, transport := newTestCtx(t)
-	if _, err := webhooksList(ctx, WebhooksListParams{}); err != nil {
-		t.Fatalf("webhooksList: %v", err)
-	}
-	assertRequest(t, transport, "GET", "/api/v1/webhooks")
-
-	ctx, transport = newWriteTestCtx(t)
-	if _, err := webhooksDelete(ctx, WebhooksDeleteParams{ID: 4}); err != nil {
-		t.Fatalf("webhooksDelete: %v", err)
-	}
-	assertRequest(t, transport, "DELETE", "/api/v1/webhooks/4")
-
-	// Delete is gated on BOTH flags — write-only must refuse.
-	ctx, _ = newTestCtx(t)
-	ctx = pipedrive.WithConfig(ctx, pipedrive.Config{AllowWrite: true})
-	res, err := webhooksDelete(ctx, WebhooksDeleteParams{ID: 4})
-	if err != nil {
-		t.Fatalf("unexpected hard error: %v", err)
-	}
-	if d, ok := res.(disabledResult); !ok || d.Error != "delete_disabled" {
-		t.Fatalf("expected delete_disabled, got %+v", res)
 	}
 }

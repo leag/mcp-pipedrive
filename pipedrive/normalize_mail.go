@@ -133,9 +133,9 @@ func NormalizeMailMessage(raw map[string]any, bodyFormat string) NormalizedMailM
 	// (sent by a workspace user); otherwise "incoming". The raw API has no
 	// direction field.
 	switch {
-	case toInt64(raw["draft_flag"]) != 0:
+	case m.DraftFlag != 0:
 		m.Direction = "draft"
-	case toInt64(raw["sent_flag"]) != 0:
+	case m.SentFlag != 0:
 		m.Direction = "outgoing"
 	default:
 		m.Direction = "incoming"

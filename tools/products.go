@@ -109,8 +109,7 @@ func productsList(ctx context.Context, args ProductsListParams) (any, error) {
 	}
 	raw, arr := extractListData(payload)
 	items := pipedrive.NormalizeProductList(arr)
-	decodeCustomFields[pipedrive.NormalizedProduct](ctx, client, pipedrive.FieldEntityProduct, mode, items)
-	decodeCustomFields[pipedrive.NormalizedProduct](ctx, client, pipedrive.FieldEntityProduct, mode, items)
+	decodeCustomFields(client, pipedrive.FieldEntityProduct, mode, items)
 	data := map[string]any{"products": items}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
@@ -151,7 +150,7 @@ func productsGet(ctx context.Context, args ProductsGetParams) (any, error) {
 	}
 	raw, m := extractItemData(payload)
 	item := pipedrive.NormalizeProduct(m)
-	decodeOneCustomFields[pipedrive.NormalizedProduct](ctx, client, pipedrive.FieldEntityProduct, mode, &item)
+	decodeOneCustomFields(client, pipedrive.FieldEntityProduct, mode, &item)
 	data := map[string]any{"product": item}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
@@ -225,7 +224,7 @@ func productsCreate(ctx context.Context, args ProductsCreateParams) (any, error)
 	if len(args.Prices) > 0 {
 		body["prices"] = args.Prices
 	}
-	if err := setCustomFields(ctx, client, pipedrive.FieldEntityProduct, body, args.CustomFields); err != nil {
+	if err := setCustomFields(client, pipedrive.FieldEntityProduct, body, args.CustomFields); err != nil {
 		return nil, err
 	}
 	req, err := client.NewRequest(pipedrive.V2, http.MethodPost, "/products", nil, body)
@@ -239,7 +238,7 @@ func productsCreate(ctx context.Context, args ProductsCreateParams) (any, error)
 	invalidateProductsCache(client, 0)
 	raw, m := extractItemData(payload)
 	item := pipedrive.NormalizeProduct(m)
-	decodeOneCustomFields[pipedrive.NormalizedProduct](ctx, client, pipedrive.FieldEntityProduct, pipedrive.CacheModeDefault, &item)
+	decodeOneCustomFields(client, pipedrive.FieldEntityProduct, pipedrive.CacheModeDefault, &item)
 	return internal.Wrap(map[string]any{"product": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
@@ -267,7 +266,7 @@ func productsUpdate(ctx context.Context, args ProductsUpdateParams) (any, error)
 	if len(args.Prices) > 0 {
 		body["prices"] = args.Prices
 	}
-	if err := setCustomFields(ctx, client, pipedrive.FieldEntityProduct, body, args.CustomFields); err != nil {
+	if err := setCustomFields(client, pipedrive.FieldEntityProduct, body, args.CustomFields); err != nil {
 		return nil, err
 	}
 	if len(body) == 0 {
@@ -285,7 +284,7 @@ func productsUpdate(ctx context.Context, args ProductsUpdateParams) (any, error)
 	invalidateProductsCache(client, args.ID)
 	raw, m := extractItemData(payload)
 	item := pipedrive.NormalizeProduct(m)
-	decodeOneCustomFields[pipedrive.NormalizedProduct](ctx, client, pipedrive.FieldEntityProduct, pipedrive.CacheModeDefault, &item)
+	decodeOneCustomFields(client, pipedrive.FieldEntityProduct, pipedrive.CacheModeDefault, &item)
 	return internal.Wrap(map[string]any{"product": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 

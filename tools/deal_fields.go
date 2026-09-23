@@ -84,26 +84,20 @@ func dealFieldsAddOption(ctx context.Context, args DealFieldsAddOptionParams) (a
 		added = append(added, label)
 		merged = append(merged, map[string]any{"label": label})
 	}
-	if len(added) == 0 {
-		return internal.Wrap(map[string]any{
-			"field":   internal.MaskSensitive(field),
-			"added":   added,
-			"skipped": skipped,
-		}, nil), nil
+	if len(added) > 0 {
+		putReq, err := client.NewRequest(pipedrive.V1, http.MethodPut, path, nil, map[string]any{"options": merged})
+		if err != nil {
+			return nil, err
+		}
+		var putPayload any
+		if err := client.DoJSON(putReq.WithContext(ctx), &putPayload); err != nil {
+			return nil, wrapAPIError(err)
+		}
+		client.InvalidatePath(pipedrive.V1, http.MethodGet, "/dealFields")
+		_, field = extractItemData(putPayload)
 	}
-
-	putReq, err := client.NewRequest(pipedrive.V1, http.MethodPut, path, nil, map[string]any{"options": merged})
-	if err != nil {
-		return nil, err
-	}
-	var putPayload any
-	if err := client.DoJSON(putReq.WithContext(ctx), &putPayload); err != nil {
-		return nil, wrapAPIError(err)
-	}
-	client.InvalidatePath(pipedrive.V1, http.MethodGet, "/dealFields")
-	_, updated := extractItemData(putPayload)
 	return internal.Wrap(map[string]any{
-		"field":   internal.MaskSensitive(updated),
+		"field":   internal.MaskSensitive(field),
 		"added":   added,
 		"skipped": skipped,
 	}, nil), nil

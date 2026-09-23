@@ -107,8 +107,7 @@ func leadsList(ctx context.Context, args LeadsListParams) (any, error) {
 	}
 	raw, arr := extractListData(payload)
 	items := pipedrive.NormalizeLeadList(arr)
-	decodeCustomFields[pipedrive.NormalizedLead](ctx, client, pipedrive.FieldEntityDeal, mode, items)
-	decodeCustomFields[pipedrive.NormalizedLead](ctx, client, pipedrive.FieldEntityDeal, mode, items)
+	decodeCustomFields(client, pipedrive.FieldEntityDeal, mode, items)
 	data := map[string]any{"leads": items}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
@@ -153,7 +152,7 @@ func leadsGet(ctx context.Context, args LeadsGetParams) (any, error) {
 	}
 	raw, m := extractItemData(payload)
 	item := pipedrive.NormalizeLead(m)
-	decodeOneCustomFields[pipedrive.NormalizedLead](ctx, client, pipedrive.FieldEntityDeal, mode, &item)
+	decodeOneCustomFields(client, pipedrive.FieldEntityDeal, mode, &item)
 	data := map[string]any{"lead": item}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
@@ -243,7 +242,7 @@ func leadsCreate(ctx context.Context, args LeadsCreateParams) (any, error) {
 	invalidateLeadsCache(client, "")
 	raw, m := extractItemData(payload)
 	item := pipedrive.NormalizeLead(m)
-	decodeOneCustomFields[pipedrive.NormalizedLead](ctx, client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &item)
+	decodeOneCustomFields(client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &item)
 	return internal.Wrap(map[string]any{"lead": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
@@ -297,7 +296,7 @@ func leadsUpdate(ctx context.Context, args LeadsUpdateParams) (any, error) {
 	invalidateLeadsCache(client, args.ID)
 	raw, m := extractItemData(payload)
 	item := pipedrive.NormalizeLead(m)
-	decodeOneCustomFields[pipedrive.NormalizedLead](ctx, client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &item)
+	decodeOneCustomFields(client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &item)
 	return internal.Wrap(map[string]any{"lead": item, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 

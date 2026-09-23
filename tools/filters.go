@@ -126,9 +126,7 @@ func filtersUpdate(ctx context.Context, args FiltersUpdateParams) (any, error) {
 		return nil, err
 	}
 	body := map[string]any{"conditions": args.Conditions}
-	if args.Name != "" {
-		body["name"] = args.Name
-	}
+	setIfNonZero(body, "name", args.Name)
 	path := "/filters/" + strconv.FormatInt(args.ID, 10)
 	req, err := client.NewRequest(pipedrive.V1, http.MethodPut, path, nil, body)
 	if err != nil {

@@ -39,7 +39,7 @@ var fieldsPath = map[FieldEntity]string{
 type FieldDef struct {
 	Key        string // 40-char hash, the wire key
 	Name       string // human name as emitted, already disambiguated
-	Type       string
+	Type       string // field_type; "set" values are always sent as arrays
 	optByID    map[int64]string
 	optByLabel map[string]int64
 }
@@ -104,7 +104,6 @@ func BuildFieldMap(raw []any) *FieldMap {
 
 	for name, defs := range byName {
 		if len(defs) == 1 {
-			defs[0].Name = name
 			fm.byName[name] = defs[0]
 			continue
 		}
@@ -155,7 +154,8 @@ func (fm *FieldMap) DecodeCustomFields(cf map[string]any) map[string]any {
 //
 // Unlike decode, an unresolvable key or label is an error. Passing it through
 // would send Pipedrive a field it silently ignores, so the write would report
-// success while dropping data.
+// success while dropping data. A nil FieldMap (metadata unavailable) therefore
+// accepts only raw hash keys, passed through unchanged.
 func (fm *FieldMap) EncodeCustomFields(cf map[string]any) (map[string]any, error) {
 	if len(cf) == 0 {
 		return nil, nil
@@ -163,13 +163,13 @@ func (fm *FieldMap) EncodeCustomFields(cf map[string]any) (map[string]any, error
 	out := make(map[string]any, len(cf))
 	var unknown []string
 	for k, v := range cf {
-		if fm == nil {
-			out[k] = v
-			continue
-		}
-		def, ok := fm.byHash[k]
-		if !ok {
-			def, ok = fm.byName[k]
+		var def *FieldDef
+		ok := false
+		if fm != nil {
+			def, ok = fm.byHash[k]
+			if !ok {
+				def, ok = fm.byName[k]
+			}
 		}
 		if !ok {
 			// A 40-char hash we have no metadata for is still a plausible key
@@ -194,20 +194,6 @@ func (fm *FieldMap) EncodeCustomFields(cf map[string]any) (map[string]any, error
 		return nil, fmt.Errorf("unresolved custom fields (%s) — list the entity once to see the available field names, or pass the 40-char field key directly", strings.Join(unknown, "; "))
 	}
 	return out, nil
-}
-
-// FieldNames lists the emitted names of every known custom field, sorted. It
-// backs the error path and lets tools advertise what callers may pass.
-func (fm *FieldMap) FieldNames() []string {
-	if fm == nil {
-		return nil
-	}
-	names := make([]string, 0, len(fm.byName))
-	for n := range fm.byName {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	return names
 }
 
 func decodeValue(def *FieldDef, v any) any {
@@ -260,7 +246,8 @@ func decodeOption(def *FieldDef, v any) any {
 }
 
 func encodeValue(def *FieldDef, v any) (any, error) {
-	if !def.hasOptions() {
+	// null clears the field, whatever its type.
+	if v == nil || !def.hasOptions() {
 		return v, nil
 	}
 	switch t := v.(type) {
@@ -275,7 +262,14 @@ func encodeValue(def *FieldDef, v any) (any, error) {
 		}
 		return out, nil
 	default:
-		return encodeOption(def, v)
+		id, err := encodeOption(def, v)
+		if err != nil {
+			return nil, err
+		}
+		if def.Type == "set" {
+			return []any{id}, nil
+		}
+		return id, nil
 	}
 }
 

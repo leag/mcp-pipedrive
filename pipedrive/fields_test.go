@@ -175,8 +175,44 @@ func TestNilFieldMapIsSafe(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("nil map must still drop nulls: got %#v want %#v", got, want)
 	}
-	back, err := fm.EncodeCustomFields(map[string]any{"b": 1})
-	if err != nil || !reflect.DeepEqual(back, map[string]any{"b": 1}) {
-		t.Fatalf("nil map encode must pass through: %#v %v", back, err)
+	hash := "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111"
+	back, err := fm.EncodeCustomFields(map[string]any{hash: 1})
+	if err != nil || !reflect.DeepEqual(back, map[string]any{hash: 1}) {
+		t.Fatalf("nil map encode must pass hash keys through: %#v %v", back, err)
+	}
+	// Without metadata a name cannot be resolved; sending it would be a silent
+	// no-op write.
+	if _, err := fm.EncodeCustomFields(map[string]any{"Prey plan": "full_suite"}); err == nil {
+		t.Fatal("nil map encode must reject field names")
+	}
+}
+
+func TestEncodeNullClearsOptionField(t *testing.T) {
+	fm := BuildFieldMap(fieldsPayload())
+	got, err := fm.EncodeCustomFields(map[string]any{"Prey plan": nil, "Regions": nil})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	want := map[string]any{
+		"bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222": nil,
+		"cccc3333cccc3333cccc3333cccc3333cccc3333": nil,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v want %#v", got, want)
+	}
+}
+
+func TestEncodeSetScalarBecomesArray(t *testing.T) {
+	fm := BuildFieldMap(fieldsPayload())
+	got, err := fm.EncodeCustomFields(map[string]any{"Regions": "EMEA", "Prey plan": "tracking"})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	want := map[string]any{
+		"cccc3333cccc3333cccc3333cccc3333cccc3333": []any{int64(2)},
+		"bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222": int64(51),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v want %#v", got, want)
 	}
 }

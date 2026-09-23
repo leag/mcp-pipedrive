@@ -28,7 +28,7 @@ type DealsListParams struct {
 	PipelineID    int64  `json:"pipeline_id,omitempty" jsonschema:"description=Filter by pipeline ID"`
 	StageID       int64  `json:"stage_id,omitempty" jsonschema:"description=Filter by stage ID"`
 	FilterID      int64  `json:"filter_id,omitempty" jsonschema:"description=Apply a saved Pipedrive filter (discover via pipedrive.filters.list)"`
-	IsArchived    *bool  `json:"is_archived,omitempty" jsonschema:"description=true → list archived deals (targets GET /deals/archived); false or omitted → non-archived deals"`
+	IsArchived    bool   `json:"is_archived,omitempty" jsonschema:"description=true → list archived deals (targets GET /deals/archived); false or omitted → non-archived deals"`
 	UpdatedSince  string `json:"updated_since,omitempty" jsonschema:"description=RFC3339 lower bound on update_time (e.g. 2026-05-01T00:00:00Z)"`
 	UpdatedUntil  string `json:"updated_until,omitempty" jsonschema:"description=RFC3339 upper bound on update_time"`
 	SortBy        string `json:"sort_by,omitempty" jsonschema:"description=Sort field: id|update_time|add_time (default id). Use add_time+desc to scan by creation date"`
@@ -150,7 +150,7 @@ func dealsList(ctx context.Context, args DealsListParams) (any, error) {
 	}
 
 	path := "/deals"
-	if args.IsArchived != nil && *args.IsArchived {
+	if args.IsArchived {
 		path = "/deals/archived"
 	}
 	req, err := client.NewRequest(pipedrive.V2, http.MethodGet, path, q, nil)
@@ -165,7 +165,7 @@ func dealsList(ctx context.Context, args DealsListParams) (any, error) {
 
 	raw, dealsArr := extractListData(payload)
 	normalized := pipedrive.NormalizeDealList(dealsArr)
-	decodeCustomFields[pipedrive.NormalizedDeal](ctx, client, pipedrive.FieldEntityDeal, mode, normalized)
+	decodeCustomFields(client, pipedrive.FieldEntityDeal, mode, normalized)
 
 	meta := map[string]any{
 		"limit": effectiveLimit(args.Limit),
@@ -212,7 +212,7 @@ func dealsGet(ctx context.Context, args DealsGetParams) (any, error) {
 
 	raw, dealRaw := extractItemData(payload)
 	deal := pipedrive.NormalizeDeal(dealRaw)
-	decodeOneCustomFields[pipedrive.NormalizedDeal](ctx, client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &deal)
+	decodeOneCustomFields(client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &deal)
 	data := map[string]any{"deal": deal}
 	if args.IncludeRaw {
 		data["raw"] = internal.MaskSensitive(raw)
@@ -292,7 +292,7 @@ func dealsCreate(ctx context.Context, args DealsCreateParams) (any, error) {
 	setIfNonZeroInt(body, "pipeline_id", args.PipelineID)
 	setIfNonZeroInt(body, "stage_id", args.StageID)
 	setIfNonZero(body, "status", args.Status)
-	if err := setCustomFields(ctx, client, pipedrive.FieldEntityDeal, body, args.CustomFields); err != nil {
+	if err := setCustomFields(client, pipedrive.FieldEntityDeal, body, args.CustomFields); err != nil {
 		return nil, err
 	}
 
@@ -307,7 +307,7 @@ func dealsCreate(ctx context.Context, args DealsCreateParams) (any, error) {
 	invalidateDealsCache(client, 0)
 	raw, dealRaw := extractItemData(payload)
 	deal := pipedrive.NormalizeDeal(dealRaw)
-	decodeOneCustomFields[pipedrive.NormalizedDeal](ctx, client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &deal)
+	decodeOneCustomFields(client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &deal)
 	return internal.Wrap(map[string]any{"deal": deal, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
@@ -337,7 +337,7 @@ func dealsUpdate(ctx context.Context, args DealsUpdateParams) (any, error) {
 	setIfNonZeroInt(body, "pipeline_id", args.PipelineID)
 	setIfNonZeroInt(body, "stage_id", args.StageID)
 	setIfNonZero(body, "status", args.Status)
-	if err := setCustomFields(ctx, client, pipedrive.FieldEntityDeal, body, args.CustomFields); err != nil {
+	if err := setCustomFields(client, pipedrive.FieldEntityDeal, body, args.CustomFields); err != nil {
 		return nil, err
 	}
 	if args.LabelIDs != nil {
@@ -347,7 +347,13 @@ func dealsUpdate(ctx context.Context, args DealsUpdateParams) (any, error) {
 		return nil, fmt.Errorf("no fields to update")
 	}
 
-	path := "/deals/" + strconv.FormatInt(args.ID, 10)
+	return patchDeal(ctx, client, args.ID, body)
+}
+
+// patchDeal PATCHes a deal and returns it normalized, shared by update and
+// archive/unarchive.
+func patchDeal(ctx context.Context, client *pipedrive.Client, id int64, body map[string]any) (any, error) {
+	path := "/deals/" + strconv.FormatInt(id, 10)
 	req, err := client.NewRequest(pipedrive.V2, http.MethodPatch, path, nil, body)
 	if err != nil {
 		return nil, err
@@ -356,10 +362,10 @@ func dealsUpdate(ctx context.Context, args DealsUpdateParams) (any, error) {
 	if err := client.DoJSON(req.WithContext(ctx), &payload); err != nil {
 		return nil, wrapAPIError(err)
 	}
-	invalidateDealsCache(client, args.ID)
+	invalidateDealsCache(client, id)
 	raw, dealRaw := extractItemData(payload)
 	deal := pipedrive.NormalizeDeal(dealRaw)
-	decodeOneCustomFields[pipedrive.NormalizedDeal](ctx, client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &deal)
+	decodeOneCustomFields(client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &deal)
 	return internal.Wrap(map[string]any{"deal": deal, "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
@@ -407,20 +413,7 @@ func dealsSetArchived(ctx context.Context, toolName string, id int64, archived b
 	if err != nil {
 		return nil, err
 	}
-	path := "/deals/" + strconv.FormatInt(id, 10)
-	req, err := client.NewRequest(pipedrive.V2, http.MethodPatch, path, nil, map[string]any{"is_archived": archived})
-	if err != nil {
-		return nil, err
-	}
-	var payload any
-	if err := client.DoJSON(req.WithContext(ctx), &payload); err != nil {
-		return nil, wrapAPIError(err)
-	}
-	invalidateDealsCache(client, id)
-	raw, dealRaw := extractItemData(payload)
-	deal := pipedrive.NormalizeDeal(dealRaw)
-	decodeOneCustomFields[pipedrive.NormalizedDeal](ctx, client, pipedrive.FieldEntityDeal, pipedrive.CacheModeDefault, &deal)
-	return internal.Wrap(map[string]any{"deal": deal, "raw": internal.MaskSensitive(raw)}, nil), nil
+	return patchDeal(ctx, client, id, map[string]any{"is_archived": archived})
 }
 
 func dealsArchive(ctx context.Context, args DealsArchiveParams) (any, error) {
