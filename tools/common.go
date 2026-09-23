@@ -52,13 +52,13 @@ func ensureToolAllowed(ctx context.Context, toolName string, kind guardKind) (an
 		if !cfg.AllowWrite {
 			return disabledResult{
 				Error:   "write_disabled",
-				Message: "Set PIPEDRIVE_ALLOW_WRITE=true to enable write operations",
+				Message: "Delete tools require BOTH PIPEDRIVE_ALLOW_WRITE=true AND PIPEDRIVE_ALLOW_DELETE=true; write is currently disabled",
 			}, nil
 		}
 		if !cfg.AllowDelete {
 			return disabledResult{
 				Error:   "delete_disabled",
-				Message: "Set PIPEDRIVE_ALLOW_DELETE=true to enable delete operations",
+				Message: "Delete tools require BOTH PIPEDRIVE_ALLOW_WRITE=true AND PIPEDRIVE_ALLOW_DELETE=true; delete is currently disabled",
 			}, nil
 		}
 	case guardAdmin:

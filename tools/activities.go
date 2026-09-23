@@ -170,19 +170,9 @@ func activitiesGet(ctx context.Context, args ActivitiesGetParams) (any, error) {
 	return internal.Wrap(data, map[string]any{"cache": cacheMeta}), nil
 }
 
-func activitiesCreate(ctx context.Context, args ActivitiesCreateParams) (any, error) {
-	if d, err := ensureToolAllowed(ctx, "pipedrive.activities.create", guardWrite); err != nil {
-		return nil, err
-	} else if d != nil {
-		return d, nil
-	}
-	if err := internal.RequireID(args.Subject, "subject"); err != nil {
-		return nil, err
-	}
-	client, err := clientOrError(ctx)
-	if err != nil {
-		return nil, err
-	}
+// activityCreateBody maps create params to the v2 POST /activities body.
+// Shared by activities.create and activities.batch_create.
+func activityCreateBody(args ActivitiesCreateParams) map[string]any {
 	body := map[string]any{"subject": args.Subject}
 	setIfNonZero(body, "type", args.Type)
 	setIfNonZero(body, "due_date", args.DueDate)
@@ -196,6 +186,23 @@ func activitiesCreate(ctx context.Context, args ActivitiesCreateParams) (any, er
 	setIfNonZeroInt(body, "person_id", args.PersonID)
 	setIfNonZeroInt(body, "org_id", args.OrganizationID)
 	setIfNonZero(body, "note", args.Note)
+	return body
+}
+
+func activitiesCreate(ctx context.Context, args ActivitiesCreateParams) (any, error) {
+	if d, err := ensureToolAllowed(ctx, "pipedrive.activities.create", guardWrite); err != nil {
+		return nil, err
+	} else if d != nil {
+		return d, nil
+	}
+	if err := internal.RequireID(args.Subject, "subject"); err != nil {
+		return nil, err
+	}
+	client, err := clientOrError(ctx)
+	if err != nil {
+		return nil, err
+	}
+	body := activityCreateBody(args)
 	req, err := client.NewRequest(pipedrive.V2, http.MethodPost, "/activities", nil, body)
 	if err != nil {
 		return nil, err
@@ -303,7 +310,7 @@ var ActivitiesGet = mcppipedrive.MustTool("pipedrive.activities.get",
 	mcp.WithTitleAnnotation("Get activity"), mcp.WithIdempotentHintAnnotation(true), mcp.WithReadOnlyHintAnnotation(true))
 
 var ActivitiesCreate = mcppipedrive.MustTool("pipedrive.activities.create",
-	"Create a new activity (write). Requires PIPEDRIVE_ALLOW_WRITE=true.",
+	"Create a new activity (write). Requires PIPEDRIVE_ALLOW_WRITE=true. Validate the type key against pipedrive.context.get activity_types[].key_string first — unknown types are rejected by Pipedrive.",
 	activitiesCreate,
 	mcp.WithTitleAnnotation("Create activity"))
 
@@ -316,4 +323,3 @@ var ActivitiesDelete = mcppipedrive.MustTool("pipedrive.activities.delete",
 	"Delete an activity (write+delete). Requires PIPEDRIVE_ALLOW_WRITE=true AND PIPEDRIVE_ALLOW_DELETE=true.",
 	activitiesDelete,
 	mcp.WithTitleAnnotation("Delete activity"), mcp.WithDestructiveHintAnnotation(true))
-

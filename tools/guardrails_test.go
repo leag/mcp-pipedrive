@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"mcp-pipedrive/pipedrive"
@@ -87,5 +88,28 @@ func TestEnsureToolAllowed_AdminToolsGate(t *testing.T) {
 	d, ok := res.(disabledResult)
 	if !ok || d.Error != "admin_tools_disabled" {
 		t.Fatalf("expected admin_tools_disabled, got %+v", res)
+	}
+}
+
+func TestEnsureToolAllowed_DeleteMessagesMentionBothFlags(t *testing.T) {
+	// write off: message must say delete needs both flags, not just write.
+	ctx := ctxWith(pipedrive.Config{AllowWrite: false, AllowDelete: true})
+	res, _ := ensureToolAllowed(ctx, "pipedrive.deals.delete", guardDelete)
+	d, ok := res.(disabledResult)
+	if !ok {
+		t.Fatalf("expected disabledResult, got %T", res)
+	}
+	if !strings.Contains(d.Message, "PIPEDRIVE_ALLOW_WRITE") || !strings.Contains(d.Message, "PIPEDRIVE_ALLOW_DELETE") {
+		t.Errorf("write-off delete message must name BOTH flags: %q", d.Message)
+	}
+
+	ctx = ctxWith(pipedrive.Config{AllowWrite: true, AllowDelete: false})
+	res, _ = ensureToolAllowed(ctx, "pipedrive.deals.delete", guardDelete)
+	d, ok = res.(disabledResult)
+	if !ok {
+		t.Fatalf("expected disabledResult, got %T", res)
+	}
+	if !strings.Contains(d.Message, "PIPEDRIVE_ALLOW_WRITE") || !strings.Contains(d.Message, "PIPEDRIVE_ALLOW_DELETE") {
+		t.Errorf("delete-off message must name BOTH flags: %q", d.Message)
 	}
 }

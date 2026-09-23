@@ -100,6 +100,30 @@ Or force-refresh on a single call:
 
 ## What is *not* exposed
 
-There is no `pipedrive.filters.{get,create,update,delete}`. Filter authoring stays in the Pipedrive UI — the MCP only **discovers** and **applies** existing filters. If you need detailed filter conditions for inspection, call `pipedrive.filters.list` with `include_raw: true` and read `data.raw`.
+There is no `pipedrive.filters.{get,delete}`. Filter deletion stays in the Pipedrive UI. `pipedrive.filters.create` and `pipedrive.filters.update` exist but are write-gated (require `PIPEDRIVE_ALLOW_WRITE=true`). For filter discovery and inspection, call `pipedrive.filters.list` with `include_raw: true` to read raw conditions.
 
-There is also no native label / custom-field filter on the list tools themselves. Both of those are exactly what saved filters are for — build the view once in the UI, then call by `filter_id`.
+There is also no native label / custom-field filter on the list tools themselves. Both of those are exactly what saved filters are for — build the filter in the UI, or create one via `pipedrive.filters.create` (see below), then call by `filter_id`.
+
+## Creating and updating filters
+
+`pipedrive.filters.create` (write-gated) creates a saved filter; `pipedrive.filters.update` replaces its `conditions` (and optionally `name`). The filter `type` is immutable after creation.
+
+Conditions are Pipedrive's two-level glue tree (max 16 leaf conditions). Example — deals where the custom field `mary_processed_at` is set AND `mary_archived_at` is empty:
+
+```json
+{
+  "glue": "and",
+  "conditions": [
+    {
+      "glue": "and",
+      "conditions": [
+        {"object": "deal", "field_id": "<id of mary_processed_at>", "operator": "IS NOT NULL", "value": null},
+        {"object": "deal", "field_id": "<id of mary_archived_at>", "operator": "IS NULL", "value": null}
+      ]
+    },
+    {"glue": "or", "conditions": []}
+  ]
+}
+```
+
+Resolve `field_id` values (numeric field IDs, not hash keys) from `pipedrive.context.get` → `deal_fields`. Then pass the returned filter `id` as `filter_id` to `pipedrive.deals.list` for true server-side filtering.
