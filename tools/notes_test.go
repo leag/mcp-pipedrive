@@ -62,7 +62,7 @@ func TestNotesUpdate_PutsOnlyPassedFields(t *testing.T) {
 		`{"success":true,"data":{"id":9,"content":"hola","deal_id":42,"user_id":7}}`,
 	})
 	unpin := false
-	if _, err := notesUpdate(ctx, NotesUpdateParams{ID: 9, UserID: 7, PinnedToDeal: &unpin}); err != nil {
+	if _, err := notesUpdate(ctx, NotesUpdateParams{ID: 9, UserID: 7, DealID: 42, PinnedToDeal: &unpin}); err != nil {
 		t.Fatalf("notesUpdate: %v", err)
 	}
 	if len(transport.requests) != 1 {
@@ -76,7 +76,7 @@ func TestNotesUpdate_PutsOnlyPassedFields(t *testing.T) {
 	if err := json.Unmarshal(transport.bodies[0], &body); err != nil {
 		t.Fatalf("unmarshal body: %v", err)
 	}
-	want := map[string]any{"user_id": float64(7), "pinned_to_deal_flag": float64(0)}
+	want := map[string]any{"user_id": float64(7), "deal_id": float64(42), "pinned_to_deal_flag": float64(0)}
 	if len(body) != len(want) {
 		t.Fatalf("body = %v, want exactly %v", body, want)
 	}
@@ -94,6 +94,24 @@ func TestNotesUpdate_RejectsMissingIDAndEmptyBody(t *testing.T) {
 	}
 	if _, err := notesUpdate(ctx, NotesUpdateParams{ID: 9}); err == nil {
 		t.Error("expected error when no fields are passed")
+	}
+	if len(transport.requests) != 0 {
+		t.Fatalf("must not call Pipedrive on invalid input; requests = %d", len(transport.requests))
+	}
+}
+
+func TestNotesUpdate_PinnedFlagRequiresParentID(t *testing.T) {
+	ctx, transport := newScriptedCtx(t, nil)
+	pin := true
+	cases := []NotesUpdateParams{
+		{ID: 9, PinnedToDeal: &pin},
+		{ID: 9, PinnedToPerson: &pin},
+		{ID: 9, PinnedToOrg: &pin},
+	}
+	for _, c := range cases {
+		if _, err := notesUpdate(ctx, c); err == nil {
+			t.Errorf("expected error for pinned flag without parent id: %+v", c)
+		}
 	}
 	if len(transport.requests) != 0 {
 		t.Fatalf("must not call Pipedrive on invalid input; requests = %d", len(transport.requests))

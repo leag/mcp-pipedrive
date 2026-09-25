@@ -51,9 +51,9 @@ type NotesUpdateParams struct {
 	OrganizationID int64  `json:"organization_id,omitempty" jsonschema:"description=New linked organization ID"`
 	LeadID         string `json:"lead_id,omitempty" jsonschema:"description=New linked lead UUID"`
 	UserID         int64  `json:"user_id,omitempty" jsonschema:"description=New author user ID (e.g. the deal owner). Only admin tokens can change the author — check user_id in the response"`
-	PinnedToDeal   *bool  `json:"pinned_to_deal,omitempty" jsonschema:"description=Set pinned-to-deal true|false"`
-	PinnedToPerson *bool  `json:"pinned_to_person,omitempty" jsonschema:"description=Set pinned-to-person true|false"`
-	PinnedToOrg    *bool  `json:"pinned_to_organization,omitempty" jsonschema:"description=Set pinned-to-organization true|false"`
+	PinnedToDeal   *bool  `json:"pinned_to_deal,omitempty" jsonschema:"description=Set pinned-to-deal true|false (also pass deal_id)"`
+	PinnedToPerson *bool  `json:"pinned_to_person,omitempty" jsonschema:"description=Set pinned-to-person true|false (also pass person_id)"`
+	PinnedToOrg    *bool  `json:"pinned_to_organization,omitempty" jsonschema:"description=Set pinned-to-organization true|false (also pass organization_id)"`
 }
 
 func notesList(ctx context.Context, args NotesListParams) (any, error) {
@@ -165,6 +165,17 @@ func notesUpdate(ctx context.Context, args NotesUpdateParams) (any, error) {
 	}
 	if args.ID <= 0 {
 		return nil, fmt.Errorf("id is required and must be > 0")
+	}
+	// Pipedrive documents each pinned flag as requiring its parent ID in the
+	// same request; reject early instead of risking a silent no-op.
+	if args.PinnedToDeal != nil && args.DealID == 0 {
+		return nil, fmt.Errorf("pinned_to_deal requires deal_id")
+	}
+	if args.PinnedToPerson != nil && args.PersonID == 0 {
+		return nil, fmt.Errorf("pinned_to_person requires person_id")
+	}
+	if args.PinnedToOrg != nil && args.OrganizationID == 0 {
+		return nil, fmt.Errorf("pinned_to_organization requires organization_id")
 	}
 	client, err := clientOrError(ctx)
 	if err != nil {
