@@ -37,9 +37,23 @@ type NotesCreateParams struct {
 	PersonID       int64  `json:"person_id,omitempty" jsonschema:"description=Linked person ID"`
 	OrganizationID int64  `json:"organization_id,omitempty" jsonschema:"description=Linked organization ID"`
 	LeadID         string `json:"lead_id,omitempty" jsonschema:"description=Linked lead UUID"`
+	UserID         int64  `json:"user_id,omitempty" jsonschema:"description=Author user ID (e.g. the deal owner). Defaults to the token user; only admin tokens can set another author — check user_id in the response"`
 	PinnedToDeal   bool   `json:"pinned_to_deal,omitempty" jsonschema:"description=Pin note to the linked deal"`
 	PinnedToPerson bool   `json:"pinned_to_person,omitempty" jsonschema:"description=Pin note to the linked person"`
 	PinnedToOrg    bool   `json:"pinned_to_organization,omitempty" jsonschema:"description=Pin note to the linked organization"`
+}
+
+type NotesUpdateParams struct {
+	ID             int64  `json:"id" jsonschema:"description=Note ID to update"`
+	Content        string `json:"content,omitempty" jsonschema:"description=New note content"`
+	DealID         int64  `json:"deal_id,omitempty" jsonschema:"description=New linked deal ID"`
+	PersonID       int64  `json:"person_id,omitempty" jsonschema:"description=New linked person ID"`
+	OrganizationID int64  `json:"organization_id,omitempty" jsonschema:"description=New linked organization ID"`
+	LeadID         string `json:"lead_id,omitempty" jsonschema:"description=New linked lead UUID"`
+	UserID         int64  `json:"user_id,omitempty" jsonschema:"description=New author user ID (e.g. the deal owner). Only admin tokens can change the author — check user_id in the response"`
+	PinnedToDeal   *bool  `json:"pinned_to_deal,omitempty" jsonschema:"description=Set pinned-to-deal true|false"`
+	PinnedToPerson *bool  `json:"pinned_to_person,omitempty" jsonschema:"description=Set pinned-to-person true|false"`
+	PinnedToOrg    *bool  `json:"pinned_to_organization,omitempty" jsonschema:"description=Set pinned-to-organization true|false"`
 }
 
 func notesList(ctx context.Context, args NotesListParams) (any, error) {
@@ -120,6 +134,7 @@ func notesCreate(ctx context.Context, args NotesCreateParams) (any, error) {
 	setIfNonZeroInt(body, "person_id", args.PersonID)
 	setIfNonZeroInt(body, "org_id", args.OrganizationID)
 	setIfNonZero(body, "lead_id", args.LeadID)
+	setIfNonZeroInt(body, "user_id", args.UserID)
 	if args.PinnedToDeal {
 		body["pinned_to_deal_flag"] = 1
 	}
@@ -142,13 +157,71 @@ func notesCreate(ctx context.Context, args NotesCreateParams) (any, error) {
 	return internal.Wrap(map[string]any{"note": pipedrive.NormalizeNote(m), "raw": internal.MaskSensitive(raw)}, nil), nil
 }
 
+func notesUpdate(ctx context.Context, args NotesUpdateParams) (any, error) {
+	if d, err := ensureToolAllowed(ctx, "pipedrive.notes.update", guardWrite); err != nil {
+		return nil, err
+	} else if d != nil {
+		return d, nil
+	}
+	if args.ID <= 0 {
+		return nil, fmt.Errorf("id is required and must be > 0")
+	}
+	client, err := clientOrError(ctx)
+	if err != nil {
+		return nil, err
+	}
+	body := map[string]any{}
+	setIfNonZero(body, "content", args.Content)
+	setIfNonZeroInt(body, "deal_id", args.DealID)
+	setIfNonZeroInt(body, "person_id", args.PersonID)
+	setIfNonZeroInt(body, "org_id", args.OrganizationID)
+	setIfNonZero(body, "lead_id", args.LeadID)
+	setIfNonZeroInt(body, "user_id", args.UserID)
+	setPinnedFlag(body, "pinned_to_deal_flag", args.PinnedToDeal)
+	setPinnedFlag(body, "pinned_to_person_flag", args.PinnedToPerson)
+	setPinnedFlag(body, "pinned_to_organization_flag", args.PinnedToOrg)
+	if len(body) == 0 {
+		return nil, fmt.Errorf("no fields to update")
+	}
+	path := "/notes/" + strconv.FormatInt(args.ID, 10)
+	req, err := client.NewRequest(pipedrive.V1, http.MethodPut, path, nil, body)
+	if err != nil {
+		return nil, err
+	}
+	var payload any
+	if err := client.DoJSON(req.WithContext(ctx), &payload); err != nil {
+		return nil, wrapAPIError(err)
+	}
+	client.InvalidatePath(pipedrive.V1, http.MethodGet, "/notes")
+	raw, m := extractItemData(payload)
+	return internal.Wrap(map[string]any{"note": pipedrive.NormalizeNote(m), "raw": internal.MaskSensitive(raw)}, nil), nil
+}
+
+// setPinnedFlag maps an optional bool to Pipedrive's v1 0/1 pinned flag, so
+// callers can both pin and unpin.
+func setPinnedFlag(body map[string]any, key string, v *bool) {
+	if v == nil {
+		return
+	}
+	if *v {
+		body[key] = 1
+	} else {
+		body[key] = 0
+	}
+}
+
 var NotesList = mcppipedrive.MustTool("pipedrive.notes.list",
 	"List notes (Pipedrive API v1) filtered by filter_id / deal / person / organization / user / start_date-end_date.",
 	notesList,
 	mcp.WithTitleAnnotation("List notes"), mcp.WithIdempotentHintAnnotation(true), mcp.WithReadOnlyHintAnnotation(true))
 
 var NotesCreate = mcppipedrive.MustTool("pipedrive.notes.create",
-	"Create a note attached to a deal/person/organization/lead (write). Requires PIPEDRIVE_ALLOW_WRITE=true.",
+	"Create a note attached to a deal/person/organization/lead (write). Pass user_id to set the author (e.g. the deal owner). Requires PIPEDRIVE_ALLOW_WRITE=true.",
 	notesCreate,
 	mcp.WithTitleAnnotation("Create note"))
+
+var NotesUpdate = mcppipedrive.MustTool("pipedrive.notes.update",
+	"Update a note's content, links, pinning or author (write; v1 PUT, only the fields you pass change). Requires PIPEDRIVE_ALLOW_WRITE=true.",
+	notesUpdate,
+	mcp.WithTitleAnnotation("Update note"))
 

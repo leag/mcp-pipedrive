@@ -60,7 +60,7 @@ func allTools() []mcppipedrive.Tool {
 		// deal fields (option management)
 		DealFieldsAddOption,
 		// notes
-		NotesList, NotesCreate,
+		NotesList, NotesCreate, NotesUpdate,
 		// filters (saved-filter discovery + management)
 		FiltersList, FiltersCreate, FiltersUpdate,
 		// mailbox

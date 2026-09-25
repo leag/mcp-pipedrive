@@ -71,6 +71,7 @@ func TestRegistry_DefaultRegistersEverythingExceptDestructiveAdmin(t *testing.T)
 		"pipedrive.filters.update",
 		"pipedrive.deal_fields.add_option",
 		"pipedrive.activities.batch_create",
+		"pipedrive.notes.update",
 		"pipedrive.webhooks.list",
 		"pipedrive.webhooks.create",
 		"pipedrive.webhooks.delete",
